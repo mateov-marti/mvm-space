@@ -375,6 +375,17 @@ function drawFuturisticOverlay() {
     ctx.restore();
 }
 
+function drawScore() {
+    ctx.save();
+    ctx.font = '20px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = '#00bcd4';
+    ctx.shadowBlur = 6;
+    ctx.fillText(`Rocas: ${destroyedRocks}  Árboles: ${destroyedTrees}`, 18, 32);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     // Fondo negro
@@ -391,6 +402,7 @@ function draw() {
         ctx.restore();
     }
     drawFuturisticOverlay();
+    drawScore();
     for (let frag of fragments) {
         drawFragment(frag);
     }
