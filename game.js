@@ -35,6 +35,13 @@ let lastObstacleTime = 0;
 // Fragmentos de desmoronamiento
 let fragments = [];
 
+// Explosión de pantalla completa
+let screenExplosion = {
+    active: false,
+    particles: [],
+    frame: 0
+};
+
 // Estrellas para el fondo
 const stars = Array.from({length: 100}, () => ({
     x: Math.random() * canvas.width,
@@ -59,6 +66,7 @@ let destroyedTrees = 0;
 let laserMultiplier = 1;
 const baseShootCooldown = 200;
 let shootCooldown = baseShootCooldown;
+let totalDestroyed = 0; // Contador total de obstáculos destruidos
 
 function drawShip() {
     if (ship.destroyed) {
@@ -139,6 +147,45 @@ function drawObstacle(obstacle) {
     ctx.save();
     ctx.translate(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2);
     ctx.rotate(obstacle.angle);
+    
+    // Aura radioactiva para rocas perseguidoras
+    if (obstacle.isChaser) {
+        const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7; // Efecto pulsante
+        const auraSize = 20 + pulse * 10;
+        
+        // Aura exterior (verde radioactivo)
+        ctx.beginPath();
+        ctx.arc(0, 0, obstacle.width/2 + auraSize, 0, Math.PI * 2);
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, obstacle.width/2 + auraSize);
+        gradient.addColorStop(0, `rgba(0, 255, 0, ${0.1 * pulse})`);
+        gradient.addColorStop(0.5, `rgba(0, 255, 0, ${0.05 * pulse})`);
+        gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Aura interior (más intensa)
+        ctx.beginPath();
+        ctx.arc(0, 0, obstacle.width/2 + auraSize/2, 0, Math.PI * 2);
+        const innerGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, obstacle.width/2 + auraSize/2);
+        innerGradient.addColorStop(0, `rgba(0, 255, 0, ${0.3 * pulse})`);
+        innerGradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+        ctx.fillStyle = innerGradient;
+        ctx.fill();
+        
+        // Partículas radioactivas
+        for (let i = 0; i < 8; i++) {
+            const angle = (Date.now() * 0.002 + i * Math.PI / 4) % (Math.PI * 2);
+            const radius = obstacle.width/2 + auraSize + Math.sin(Date.now() * 0.005 + i) * 5;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 2 + Math.sin(Date.now() * 0.01 + i) * 1, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0, 255, 0, ${0.6 * pulse})`;
+            ctx.fill();
+        }
+    }
+    
     ctx.shadowColor = '#888';
     ctx.shadowBlur = 10;
     if (obstacle.type === 'rock') {
@@ -259,8 +306,34 @@ function createObstacle() {
         freq,
         t: 0,
         hp,
-        maxHp
+        maxHp,
+        isChaser: false
     });
+}
+
+function createChaserRocks() {
+    for (let i = 0; i < 3; i++) {
+        const width = 30 + Math.random() * 20;
+        const height = 18 + Math.random() * 12;
+        const startX = Math.random() * (canvas.width - width);
+        obstacles.push({
+            x: startX,
+            y: -height,
+            width,
+            height,
+            color: '#ff4444', // Color rojo para distinguirlas
+            angle: Math.random() * Math.PI * 2,
+            type: 'rock',
+            baseX: startX,
+            phase: 0,
+            radius: 0,
+            freq: 0,
+            t: 0,
+            hp: 15, // Más vida que las rocas normales
+            maxHp: 15,
+            isChaser: true
+        });
+    }
 }
 
 function createFragments(obs) {
@@ -284,8 +357,19 @@ function updateObstacles() {
     for (let obs of obstacles) {
         obs.t += 1;
         obs.y += obstacleSpeed;
-        // Movimiento circular
-        obs.x = obs.baseX + Math.sin(obs.phase + obs.t * obs.freq) * obs.radius;
+        
+        if (obs.isChaser) {
+            // Las rocas perseguidoras se mueven hacia la nave
+            const targetX = ship.x + ship.width / 2;
+            const currentX = obs.x + obs.width / 2;
+            const diffX = targetX - currentX;
+            
+            // Movimiento suave hacia la nave, pero siempre cayendo
+            obs.x += diffX * 0.02; // Factor de persecución
+        } else {
+            // Movimiento circular normal
+            obs.x = obs.baseX + Math.sin(obs.phase + obs.t * obs.freq) * obs.radius;
+        }
     }
     obstacles = obstacles.filter(obs => obs.y < canvas.height);
 }
@@ -306,6 +390,91 @@ function updateLasers() {
     lasers = lasers.filter(laser => laser.y + laserHeight > 0);
 }
 
+function createScreenExplosion() {
+    screenExplosion.active = true;
+    screenExplosion.frame = 0;
+    screenExplosion.particles = [];
+    
+    // Crear múltiples explosiones por toda la pantalla
+    for (let explosion = 0; explosion < 8; explosion++) {
+        const centerX = Math.random() * canvas.width;
+        const centerY = Math.random() * canvas.height;
+        
+        // Crear partículas para cada explosión
+        for (let i = 0; i < 50; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 3 + Math.random() * 12;
+            const size = 4 + Math.random() * 12;
+            
+            screenExplosion.particles.push({
+                x: centerX,
+                y: centerY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: size,
+                color: `hsl(${Math.random() * 60 + 10}, 100%, 50%)`, // Naranjas y rojos
+                alpha: 1.0,
+                decay: 0.015 + Math.random() * 0.02,
+                explosionId: explosion
+            });
+        }
+    }
+}
+
+function updateScreenExplosion() {
+    if (!screenExplosion.active) return;
+    
+    screenExplosion.frame++;
+    
+    for (let particle of screenExplosion.particles) {
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.alpha -= particle.decay;
+        particle.size *= 0.99;
+        
+        // Hacer que las partículas se expandan más
+        particle.vx *= 1.02;
+        particle.vy *= 1.02;
+    }
+    
+    screenExplosion.particles = screenExplosion.particles.filter(p => p.alpha > 0);
+    
+    if (screenExplosion.particles.length === 0) {
+        screenExplosion.active = false;
+    }
+}
+
+function drawScreenExplosion() {
+    if (!screenExplosion.active) return;
+    
+    // Fondo de explosión más intenso
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#ff2200';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    
+    // Partículas de explosión con más efectos
+    for (let particle of screenExplosion.particles) {
+        ctx.save();
+        ctx.globalAlpha = particle.alpha;
+        ctx.fillStyle = particle.color;
+        ctx.shadowColor = particle.color;
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Efecto de resplandor adicional
+        ctx.globalAlpha = particle.alpha * 0.5;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
 function checkCollisions() {
     if (ship.destroyed) return;
     for (let obs of obstacles) {
@@ -317,7 +486,8 @@ function checkCollisions() {
         ) {
             ship.destroyed = true;
             ship.explosionFrame = 0;
-            setTimeout(() => { gameOver = true; }, 700);
+            createScreenExplosion(); // Crear explosión de pantalla completa
+            setTimeout(() => { gameOver = true; }, 2000); // Más tiempo para ver la explosión
         }
     }
     for (let i = obstacles.length - 1; i >= 0; i--) {
@@ -332,8 +502,14 @@ function checkCollisions() {
             ) {
                 obs.hp--;
                 if (obs.hp <= 0) {
+                    totalDestroyed++; // Incrementar contador total
+                    
                     if (obs.type === 'rock' || obs.type === 'tree') {
                         destroyedRocks++;
+                        // Crear rocas perseguidoras cada 10 puntos totales
+                        if (totalDestroyed % 10 === 0) {
+                            createChaserRocks();
+                        }
                         if (destroyedRocks > 15) powerUpActive = true;
                     }
                     if (obs.type === 'tree') {
@@ -381,13 +557,21 @@ function drawScore() {
     ctx.fillStyle = '#fff';
     ctx.shadowColor = '#00bcd4';
     ctx.shadowBlur = 6;
-    ctx.fillText(`Rocas: ${destroyedRocks}  Árboles: ${destroyedTrees}`, 18, 32);
+    ctx.fillText(`Rocas: ${destroyedRocks}  Árboles: ${destroyedTrees}  Total: ${totalDestroyed}`, 18, 32);
     ctx.shadowBlur = 0;
     ctx.restore();
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Si hay explosión activa, solo mostrar la explosión
+    if (screenExplosion.active) {
+        drawScreenExplosion();
+        return;
+    }
+    
+    // Si no hay explosión, mostrar el juego normal
     // Fondo negro
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -444,6 +628,8 @@ function resetGame() {
     powerUpActive = false;
     destroyedTrees = 0;
     laserMultiplier = 1;
+    totalDestroyed = 0; // Resetear contador total
+    screenExplosion.active = false; // Resetear explosión de pantalla
 }
 
 function updateStars() {
@@ -458,15 +644,21 @@ function updateStars() {
 
 function gameLoop(timestamp) {
     if (gameOver) {
+        // Fondo negro para el game over
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
         ctx.fillStyle = '#fff';
         ctx.font = '40px Arial';
         ctx.fillText('¡Game Over!', 90, canvas.height / 2);
         ctx.font = '20px Arial';
-        ctx.fillText('Presiona Enter para reiniciar', 70, canvas.height / 2 + 40);
+        ctx.fillText('Presiona O para reiniciar', 70, canvas.height / 2 + 40);
         return;
     }
+    
     update();
     updateStars();
+    updateScreenExplosion(); // Actualizar explosión de pantalla
     if (!lastObstacleTime || timestamp - lastObstacleTime > obstacleInterval) {
         createObstacle();
         lastObstacleTime = timestamp;
@@ -510,6 +702,11 @@ setInterval(() => {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') moveLeft = true;
     if (e.key === 'ArrowRight') moveRight = true;
+    if (e.key === 'o' || e.key === 'O') {
+        if (gameOver) {
+            resetGame();
+        }
+    }
 });
 document.addEventListener('keyup', (e) => {
     if (e.key === 'ArrowLeft') moveLeft = false;
