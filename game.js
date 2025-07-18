@@ -8,9 +8,9 @@ const ship = {
     x: canvas.width / 2 - 22,
     y: canvas.height - 100,
     speed: 5,
-    color: '#b3e5fc', // cuerpo principal
-    cockpitColor: '#00bcd4',
-    wingColor: '#90caf9',
+    color: '#222', // cuerpo principal negro
+    cockpitColor: '#b0bec5', // cabina gris claro
+    wingColor: '#757575', // alas gris oscuro
     fireColor: '#ff9800',
     laserColor: '#ff2222', // Rojo intenso
     alive: true,
@@ -63,12 +63,198 @@ let gameOver = false;
 let destroyedRocks = 0;
 let powerUpActive = false;
 let destroyedTrees = 0;
+let destroyedChaserRocks = 0; // Nuevo contador para rocas perseguidoras
 let laserMultiplier = 1;
 const baseShootCooldown = 200;
 let shootCooldown = baseShootCooldown;
 let totalDestroyed = 0; // Contador total de obstáculos destruidos
 
+// Fragmentos de destrucción de la nave
+let shipDestructionFragments = [];
+
+// Estado del escudo con dos usos
+let shieldActive = false;
+let shieldAvailable = true; // Siempre disponible
+let shieldUses = 2; // Dos usos disponibles
+let shieldDuration = 3000; // ms
+let shieldEndTime = 0;
+
+// Array de naves aliadas (múltiples naves)
+let allyShips = [];
+
+// Sistema de audio
+let audioContext;
+let masterGain;
+
+// Inicializar audio
+function initAudio() {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioContext.createGain();
+        masterGain.gain.value = 0.3; // Volumen general
+        masterGain.connect(audioContext.destination);
+    } catch (e) {
+        console.log('Audio no disponible');
+    }
+}
+
+// Efecto de sonido para disparo láser
+function playLaserSound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.1);
+    oscillator.type = 'sawtooth';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+}
+
+// Efecto de sonido para explosión
+function playExplosionSound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+    
+    oscillator.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
+    oscillator.type = 'sawtooth';
+    
+    filter.frequency.setValueAtTime(2000, audioContext.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
+    filter.type = 'lowpass';
+    
+    gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+}
+
+// Efecto de sonido para colisión con escudo
+function playShieldSound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.05);
+    oscillator.frequency.setValueAtTime(400, audioContext.currentTime + 0.1);
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.15);
+}
+
+// Efecto de sonido para activar escudo
+function playShieldActivateSound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.2);
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.2);
+}
+
+// Efecto de sonido para destrucción de obstáculo
+function playObstacleDestroySound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.15);
+    oscillator.type = 'square';
+    
+    gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.15);
+}
+
+// Efecto de sonido para game over
+function playGameOverSound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.5);
+    oscillator.type = 'sawtooth';
+    
+    gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+}
+
+// Efecto de sonido para nave aliada
+function playAllyShipSound() {
+    if (!audioContext) return;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(masterGain);
+    
+    oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(700, audioContext.currentTime + 0.1);
+    oscillator.frequency.setValueAtTime(500, audioContext.currentTime + 0.2);
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.2);
+}
+
 function drawShip() {
+    if (!ship.alive) return;
     if (ship.destroyed) {
         // Animación de explosión
         for (let i = 0; i < 18; i++) {
@@ -82,30 +268,43 @@ function drawShip() {
             ctx.stroke();
             ctx.restore();
         }
+        // Dibujar fragmentos de destrucción realistas
+        drawShipDestructionFragments();
         return;
     }
     ctx.save();
     ctx.translate(ship.x + ship.width / 2, ship.y + ship.height / 2);
-    // Cuerpo principal
+    // Cuerpo principal (negro con bordes azulados futuristas)
     ctx.beginPath();
-    ctx.moveTo(0, -18); // punta
-    ctx.lineTo(18, 16); // derecha
-    ctx.lineTo(0, 10); // base
-    ctx.lineTo(-18, 16); // izquierda
+    ctx.moveTo(0, -18);
+    ctx.lineTo(18, 16);
+    ctx.lineTo(0, 10);
+    ctx.lineTo(-18, 16);
     ctx.closePath();
     ctx.fillStyle = ship.color;
-    ctx.shadowColor = '#00bcd4';
-    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#00eaff';
+    ctx.shadowBlur = 18;
     ctx.fill();
     ctx.shadowBlur = 0;
-    // Cabina
+    // Borde exterior azul neón
+    ctx.save();
+    ctx.strokeStyle = '#00eaff';
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.7;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // Cabina (gris claro con brillo)
     ctx.beginPath();
     ctx.ellipse(0, -4, 7, 10, 0, 0, Math.PI * 2);
     ctx.fillStyle = ship.cockpitColor;
-    ctx.globalAlpha = 0.8;
+    ctx.globalAlpha = 0.92;
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 10;
     ctx.fill();
     ctx.globalAlpha = 1;
-    // Alas
+    ctx.shadowBlur = 0;
+    // Alas (gris oscuro con borde azul)
     ctx.beginPath();
     ctx.moveTo(-18, 16);
     ctx.lineTo(-28, 24);
@@ -113,33 +312,101 @@ function drawShip() {
     ctx.closePath();
     ctx.fillStyle = ship.wingColor;
     ctx.fill();
+    ctx.save();
+    ctx.strokeStyle = '#00eaff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
     ctx.beginPath();
     ctx.moveTo(18, 16);
     ctx.lineTo(28, 24);
     ctx.lineTo(10, 12);
     ctx.closePath();
     ctx.fill();
-    // Fuego trasero
+    ctx.save();
+    ctx.strokeStyle = '#00eaff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // Fuego trasero potente (igual que antes)
+    let fuegoLong = 38 + Math.sin(Date.now()/60)*6 + Math.random()*6;
+    let fuegoAncho = 18 + Math.sin(Date.now()/80)*3 + Math.random()*2;
+    ctx.save();
     ctx.beginPath();
-    ctx.moveTo(-7, 18);
-    ctx.lineTo(0, 32 + Math.random() * 6);
-    ctx.lineTo(7, 18);
+    ctx.moveTo(-fuegoAncho/2, 18);
+    ctx.lineTo(0, fuegoLong);
+    ctx.lineTo(fuegoAncho/2, 18);
     ctx.closePath();
-    ctx.fillStyle = ship.fireColor;
+    let gradFuego = ctx.createLinearGradient(0, 18, 0, fuegoLong);
+    gradFuego.addColorStop(0, 'rgba(0,255,255,0.7)');
+    gradFuego.addColorStop(0.3, 'rgba(0,180,255,0.5)');
+    gradFuego.addColorStop(0.7, 'rgba(0,80,255,0.3)');
+    gradFuego.addColorStop(1, 'rgba(255,255,255,0.1)');
+    ctx.fillStyle = gradFuego;
+    ctx.shadowColor = '#00eaff';
+    ctx.shadowBlur = 32;
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-5, 18);
+    ctx.lineTo(0, fuegoLong - 10);
+    ctx.lineTo(5, 18);
+    ctx.closePath();
+    let gradNucleo = ctx.createLinearGradient(0, 18, 0, fuegoLong-10);
+    gradNucleo.addColorStop(0, 'rgba(255,255,255,0.95)');
+    gradNucleo.addColorStop(1, 'rgba(0,255,255,0.2)');
+    ctx.fillStyle = gradNucleo;
     ctx.globalAlpha = 0.7;
     ctx.fill();
     ctx.globalAlpha = 1;
+    ctx.restore();
     ctx.restore();
 }
 
 function drawLaser(laser) {
     ctx.save();
-    let color = powerUpActive ? '#00ff44' : ship.laserColor;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = color;
+    // Gradiente de energía para el láser
+    let grad = ctx.createLinearGradient(laser.x, laser.y + laserHeight, laser.x, laser.y);
+    grad.addColorStop(0, 'rgba(255, 80, 80, 0.1)'); // base suave
+    grad.addColorStop(0.2, 'rgba(255, 80, 80, 0.5)');
+    grad.addColorStop(0.5, 'rgba(255, 0, 0, 1)'); // centro intenso
+    grad.addColorStop(0.8, 'rgba(255, 255, 80, 0.7)'); // energía amarilla
+    grad.addColorStop(1, 'rgba(255,255,255,0.9)'); // punta brillante
+
+    // Estela breve (fade out)
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.shadowColor = '#ff4444';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = grad;
+    ctx.fillRect(laser.x - 2, laser.y + 10, laserWidth + 4, laserHeight * 1.8);
+    ctx.restore();
+
+    // Cuerpo principal del láser
+    ctx.save();
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = grad;
     ctx.fillRect(laser.x, laser.y, laserWidth, laserHeight);
-    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Resplandor animado alrededor del láser
+    ctx.save();
+    ctx.globalAlpha = 0.5 + 0.2 * Math.sin(Date.now() / 80 + laser.x);
+    ctx.shadowColor = '#ff2222';
+    ctx.shadowBlur = 24;
+    ctx.fillStyle = 'rgba(255, 40, 40, 0.2)';
+    ctx.fillRect(laser.x - 4, laser.y - 6, laserWidth + 8, laserHeight + 12);
+    ctx.restore();
+
     ctx.restore();
 }
 
@@ -150,16 +417,16 @@ function drawObstacle(obstacle) {
     
     // Aura radioactiva para rocas perseguidoras
     if (obstacle.isChaser) {
-        const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7; // Efecto pulsante
-        const auraSize = 20 + pulse * 10;
+        const pulse = Math.sin(Date.now() * 0.012 + obstacle.t) * 0.3 + 0.7;
+        const auraSize = 28 + pulse * 16;
         
-        // Aura exterior (verde radioactivo)
+        // Aura exterior (rojo neón)
         ctx.beginPath();
         ctx.arc(0, 0, obstacle.width/2 + auraSize, 0, Math.PI * 2);
         const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, obstacle.width/2 + auraSize);
-        gradient.addColorStop(0, `rgba(0, 255, 0, ${0.1 * pulse})`);
-        gradient.addColorStop(0.5, `rgba(0, 255, 0, ${0.05 * pulse})`);
-        gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+        gradient.addColorStop(0, `rgba(255, 23, 68, ${0.13 * pulse})`);
+        gradient.addColorStop(0.5, `rgba(255, 23, 68, ${0.07 * pulse})`);
+        gradient.addColorStop(1, 'rgba(255, 23, 68, 0)');
         ctx.fillStyle = gradient;
         ctx.fill();
         
@@ -167,30 +434,33 @@ function drawObstacle(obstacle) {
         ctx.beginPath();
         ctx.arc(0, 0, obstacle.width/2 + auraSize/2, 0, Math.PI * 2);
         const innerGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, obstacle.width/2 + auraSize/2);
-        innerGradient.addColorStop(0, `rgba(0, 255, 0, ${0.3 * pulse})`);
-        innerGradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+        innerGradient.addColorStop(0, `rgba(255, 23, 68, ${0.35 * pulse})`);
+        innerGradient.addColorStop(1, 'rgba(255, 23, 68, 0)');
         ctx.fillStyle = innerGradient;
         ctx.fill();
         
-        // Partículas radioactivas
-        for (let i = 0; i < 8; i++) {
-            const angle = (Date.now() * 0.002 + i * Math.PI / 4) % (Math.PI * 2);
-            const radius = obstacle.width/2 + auraSize + Math.sin(Date.now() * 0.005 + i) * 5;
+        // Partículas flotantes rojas
+        for (let i = 0; i < 10; i++) {
+            const angle = (Date.now() * 0.002 + i * Math.PI / 5) % (Math.PI * 2);
+            const radius = obstacle.width/2 + auraSize + Math.sin(Date.now() * 0.005 + i) * 7;
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
             
             ctx.beginPath();
-            ctx.arc(x, y, 2 + Math.sin(Date.now() * 0.01 + i) * 1, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(0, 255, 0, ${0.6 * pulse})`;
+            ctx.arc(x, y, 2.5 + Math.sin(Date.now() * 0.01 + i) * 1.2, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 23, 68, ${0.7 * pulse})`;
+            ctx.shadowColor = '#ff1744';
+            ctx.shadowBlur = 12;
             ctx.fill();
+            ctx.shadowBlur = 0;
         }
     }
     
-    ctx.shadowColor = '#888';
-    ctx.shadowBlur = 10;
+    ctx.shadowColor = obstacle.isChaser ? '#ff1744' : '#888';
+    ctx.shadowBlur = obstacle.isChaser ? 18 : 10;
     if (obstacle.type === 'rock') {
-        // Roca realista (gris, con grietas)
-        ctx.fillStyle = obstacle.color;
+        // Roca futurista (roja neón si es perseguidora)
+        ctx.fillStyle = obstacle.isChaser ? '#ff1744' : obstacle.color;
         ctx.beginPath();
         ctx.moveTo(-obstacle.width/2, -obstacle.height/2);
         ctx.lineTo(obstacle.width/2, -obstacle.height/2 + 5);
@@ -198,15 +468,35 @@ function drawObstacle(obstacle) {
         ctx.lineTo(-obstacle.width/2 + 7, obstacle.height/2 - 3);
         ctx.closePath();
         ctx.fill();
-        // Grietas
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-obstacle.width/4, 0);
-        ctx.lineTo(obstacle.width/4, obstacle.height/4);
-        ctx.moveTo(0, -obstacle.height/4);
-        ctx.lineTo(0, obstacle.height/4);
-        ctx.stroke();
+        // Grietas futuristas
+        if (obstacle.isChaser) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(-obstacle.width/4, 0);
+            ctx.lineTo(obstacle.width/4, obstacle.height/4);
+            ctx.moveTo(0, -obstacle.height/4);
+            ctx.lineTo(0, obstacle.height/4);
+            ctx.stroke();
+            // Líneas de energía
+            ctx.strokeStyle = '#ff1744';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(-obstacle.width/4, -obstacle.height/4);
+            ctx.lineTo(obstacle.width/4, obstacle.height/4);
+            ctx.moveTo(obstacle.width/4, -obstacle.height/4);
+            ctx.lineTo(-obstacle.width/4, obstacle.height/4);
+            ctx.stroke();
+        } else {
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-obstacle.width/4, 0);
+            ctx.lineTo(obstacle.width/4, obstacle.height/4);
+            ctx.moveTo(0, -obstacle.height/4);
+            ctx.lineTo(0, obstacle.height/4);
+            ctx.stroke();
+        }
     } else if (obstacle.type === 'car') {
         // Auto (rectángulo con detalles)
         ctx.fillStyle = obstacle.color;
@@ -312,16 +602,19 @@ function createObstacle() {
 }
 
 function createChaserRocks() {
+    // NO eliminar obstáculos existentes, solo agregar las piedras radiactivas
     for (let i = 0; i < 3; i++) {
-        const width = 30 + Math.random() * 20;
-        const height = 18 + Math.random() * 12;
+        const width = 34 + Math.random() * 18;
+        const height = 22 + Math.random() * 10;
         const startX = Math.random() * (canvas.width - width);
+        const baseHp = 40;
+        const reducedHp = Math.round(baseHp * 0.95); // 5% menos
         obstacles.push({
             x: startX,
             y: -height,
             width,
             height,
-            color: '#ff4444', // Color rojo para distinguirlas
+            color: '#ff1744',
             angle: Math.random() * Math.PI * 2,
             type: 'rock',
             baseX: startX,
@@ -329,10 +622,23 @@ function createChaserRocks() {
             radius: 0,
             freq: 0,
             t: 0,
-            hp: 15, // Más vida que las rocas normales
-            maxHp: 15,
-            isChaser: true
+            hp: reducedHp,
+            maxHp: reducedHp,
+            isChaser: true,
+            effectFrame: 0,
+            chaserSpeed: 1.1
         });
+    }
+    // Agregar una nueva nave aliada cada vez
+    createAllyShip();
+    // Asegurar que todas las naves estén vivas
+    ship.alive = true;
+    ship.destroyed = false;
+    ship.explosionFrame = 0;
+    for (let allyShip of allyShips) {
+        allyShip.alive = true;
+        allyShip.destroyed = false;
+        allyShip.explosionFrame = 0;
     }
 }
 
@@ -356,14 +662,16 @@ function createFragments(obs) {
 function updateObstacles() {
     for (let obs of obstacles) {
         obs.t += 1;
-        obs.y += obstacleSpeed;
-        
+        if (obs.isChaser && obs.chaserSpeed) {
+            obs.y += obs.chaserSpeed;
+        } else {
+            obs.y += obstacleSpeed;
+        }
         if (obs.isChaser) {
             // Las rocas perseguidoras se mueven hacia la nave
             const targetX = ship.x + ship.width / 2;
             const currentX = obs.x + obs.width / 2;
             const diffX = targetX - currentX;
-            
             // Movimiento suave hacia la nave, pero siempre cayendo
             obs.x += diffX * 0.02; // Factor de persecución
         } else {
@@ -475,19 +783,100 @@ function drawScreenExplosion() {
     }
 }
 
+function triggerObstaclesDestruccionNatural(callback) {
+    let i = 0;
+    function destruirSiguiente() {
+        if (i < obstacles.length) {
+            // Simula destrucción normal: fragmentos y eliminación
+            createFragments(obstacles[i]);
+            obstacles.splice(i, 1);
+            setTimeout(destruirSiguiente, 120); // Rápido, como destrucción normal
+        } else {
+            if (callback) callback();
+        }
+    }
+    destruirSiguiente();
+}
+
+function createObstacleDestructionFragments(obs) {
+    const cx = obs.x + obs.width / 2;
+    const cy = obs.y + obs.height / 2;
+    for (let i = 0; i < 32 + Math.random()*16; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.5 + Math.random() * 3.5;
+        const color = Math.random() < 0.5 ?
+            `rgba(${180 + Math.random()*75},${30 + Math.random()*30},${30 + Math.random()*30},${0.85 - Math.random()*0.3})` : // rojo
+            `rgba(${120 + Math.random()*80},${120 + Math.random()*80},${120 + Math.random()*80},${0.7 - Math.random()*0.2})`; // gris
+        fragments.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: 1.5 + Math.random() * 2.5,
+            color: color,
+            alpha: 1.0,
+            decay: 0.014 + Math.random() * 0.012
+        });
+    }
+}
+
 function checkCollisions() {
-    if (ship.destroyed) return;
-    for (let obs of obstacles) {
-        if (
-            ship.x < obs.x + obs.width &&
-            ship.x + ship.width > obs.x &&
-            ship.y < obs.y + obs.height &&
-            ship.y + ship.height > obs.y
-        ) {
-            ship.destroyed = true;
-            ship.explosionFrame = 0;
-            createScreenExplosion(); // Crear explosión de pantalla completa
-            setTimeout(() => { gameOver = true; }, 2000); // Más tiempo para ver la explosión
+    // Colisión nave principal
+    if (ship.alive && !ship.destroyed) {
+        for (let obs of obstacles.slice()) {
+            if (
+                ship.x < obs.x + obs.width &&
+                ship.x + ship.width > obs.x &&
+                ship.y < obs.y + obs.height &&
+                ship.y + ship.height > obs.y
+            ) {
+                if (shieldActive) {
+                    createObstacleDestructionFragments(obs);
+                    obstacles.splice(obstacles.indexOf(obs), 1);
+                    shieldActive = false;
+                    playShieldSound();
+                    continue;
+                }
+                ship.destroyed = true;
+                ship.alive = false;
+                ship.explosionFrame = 0;
+                createShipDestructionFragments();
+                playExplosionSound();
+                setTimeout(() => {
+                    triggerObstaclesDestruccionNatural(() => {
+                        setTimeout(() => { 
+                            gameOver = allyShips.every(s => !s.alive);
+                            if (gameOver) playGameOverSound();
+                        }, 700);
+                    });
+                }, 100);
+            }
+        }
+    }
+    // Colisión naves aliadas
+    for (let allyShip of allyShips) {
+        if (allyShip && allyShip.alive && !allyShip.destroyed) {
+            for (let obs of obstacles.slice()) {
+                if (
+                    allyShip.x < obs.x + obs.width &&
+                    allyShip.x + allyShip.width > obs.x &&
+                    allyShip.y < obs.y + obs.height &&
+                    allyShip.y + allyShip.height > obs.y
+                ) {
+                    if (shieldActive) {
+                        createObstacleDestructionFragments(obs);
+                        obstacles.splice(obstacles.indexOf(obs), 1);
+                        shieldActive = false;
+                        playShieldSound();
+                        continue;
+                    }
+                    allyShip.destroyed = true;
+                    allyShip.alive = false;
+                    allyShip.explosionFrame = 0;
+                    playExplosionSound();
+                    break;
+                }
+            }
         }
     }
     for (let i = obstacles.length - 1; i >= 0; i--) {
@@ -501,28 +890,44 @@ function checkCollisions() {
                 laser.y + laserHeight > obs.y
             ) {
                 obs.hp--;
+                if (obs.hp > 0) {
+                    for (let k = 0; k < 4 + Math.random()*2; k++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 0.8 + Math.random() * 1.8;
+                        const color = Math.random() < 0.5 ?
+                            `rgba(${180 + Math.random()*75},${30 + Math.random()*30},${30 + Math.random()*30},${0.7 - Math.random()*0.3})` :
+                            `rgba(${120 + Math.random()*80},${120 + Math.random()*80},${120 + Math.random()*80},${0.5 - Math.random()*0.2})`;
+                        fragments.push({
+                            x: obs.x + obs.width/2,
+                            y: obs.y + obs.height/2,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed,
+                            radius: 1 + Math.random() * 1.5,
+                            color: color,
+                            alpha: 1.0,
+                            decay: 0.018 + Math.random() * 0.012
+                        });
+                    }
+                }
                 if (obs.hp <= 0) {
-                    totalDestroyed++; // Incrementar contador total
-                    
-                    if (obs.type === 'rock' || obs.type === 'tree') {
-                        destroyedRocks++;
-                        // Crear rocas perseguidoras cada 10 puntos totales
-                        if (totalDestroyed % 10 === 0) {
-                            createChaserRocks();
-                        }
-                        if (destroyedRocks > 15) powerUpActive = true;
-                    }
-                    if (obs.type === 'tree') {
-                        destroyedTrees++;
-                        // Disparo más rápido
-                        shootCooldown = Math.max(40, shootCooldown - 10);
-                        // Cada 10 árboles destruidos, duplica el disparo
-                        if (destroyedTrees % 10 === 0) {
-                            laserMultiplier *= 2;
+                    totalDestroyed++;
+                    if (totalDestroyed % 10 === 0) {
+                        createChaserRocks();
+                        playAllyShipSound();
+                        if (laserMultiplier < 40) {
+                            laserMultiplier = Math.min(laserMultiplier * 2, 40);
                         }
                     }
-                    createFragments(obs);
+                    if (totalDestroyed === 10 && !allyShips.length) {
+                        createAllyShip();
+                        playAllyShipSound();
+                    }
+                    if (obs.isChaser) {
+                        destroyedChaserRocks++;
+                    }
+                    createObstacleDestructionFragments(obs);
                     obstacles.splice(i, 1);
+                    playObstacleDestroySound();
                 }
                 lasers.splice(j, 1);
                 break;
@@ -557,7 +962,7 @@ function drawScore() {
     ctx.fillStyle = '#fff';
     ctx.shadowColor = '#00bcd4';
     ctx.shadowBlur = 6;
-    ctx.fillText(`Rocas: ${destroyedRocks}  Árboles: ${destroyedTrees}  Total: ${totalDestroyed}`, 18, 32);
+    ctx.fillText(`Total: ${totalDestroyed}  Radiactivas: ${destroyedChaserRocks}`, 18, 32);
     ctx.shadowBlur = 0;
     ctx.restore();
 }
@@ -597,6 +1002,9 @@ function draw() {
         drawLaser(laser);
     }
     drawShip();
+    drawAllyShips();
+    drawShield();
+    drawShieldButton();
 }
 
 function update() {
@@ -612,6 +1020,7 @@ function update() {
     if (ship.destroyed && ship.explosionFrame < 15) {
         ship.explosionFrame++;
     }
+    updateAllyShips();
 }
 
 function resetGame() {
@@ -619,6 +1028,7 @@ function resetGame() {
     ship.y = canvas.height - 100;
     ship.destroyed = false;
     ship.explosionFrame = 0;
+    ship.alive = true;
     obstacles = [];
     lasers = [];
     fragments = [];
@@ -627,9 +1037,15 @@ function resetGame() {
     destroyedRocks = 0;
     powerUpActive = false;
     destroyedTrees = 0;
+    destroyedChaserRocks = 0;
     laserMultiplier = 1;
-    totalDestroyed = 0; // Resetear contador total
-    screenExplosion.active = false; // Resetear explosión de pantalla
+    totalDestroyed = 0;
+    screenExplosion.active = false;
+    shipDestructionFragments = [];
+    shieldActive = false;
+    shieldUses = 2;
+    shieldEndTime = 0;
+    allyShips = [];
 }
 
 function updateStars() {
@@ -652,7 +1068,7 @@ function gameLoop(timestamp) {
         ctx.font = '40px Arial';
         ctx.fillText('¡Game Over!', 90, canvas.height / 2);
         ctx.font = '20px Arial';
-        ctx.fillText('Presiona O para reiniciar', 70, canvas.height / 2 + 40);
+        ctx.fillText('Presiona Ctrl+R para reiniciar', 70, canvas.height / 2 + 40);
         return;
     }
     
@@ -666,30 +1082,57 @@ function gameLoop(timestamp) {
     updateObstacles();
     updateLasers();
     updateFragments();
+    updateShipDestructionFragments(); // Actualizar fragmentos de destrucción de la nave
+    updateShield();
     checkCollisions();
     draw();
     requestAnimationFrame(gameLoop);
 }
 
-// Eliminar toda la lógica de teclas para disparar y disparar automáticamente en el setInterval
 setInterval(() => {
-    if (!gameOver && !ship.destroyed && canShoot) {
+    if (!gameOver && canShoot) {
         if (powerUpActive || laserMultiplier > 1) {
-            // Disparo múltiple
             let n = Math.max(laserMultiplier, powerUpActive ? 2 : 1);
             let spread = 16;
-            for (let i = 0; i < n; i++) {
-                let offset = (i - (n - 1) / 2) * spread;
-                lasers.push({
-                    x: ship.x + ship.width / 2 - laserWidth / 2 + offset,
-                    y: ship.y - laserHeight
-                });
+            if (ship.alive && !ship.destroyed) {
+                for (let i = 0; i < n; i++) {
+                    let offset = (i - (n - 1) / 2) * spread;
+                    lasers.push({
+                        x: ship.x + ship.width / 2 - laserWidth / 2 + offset,
+                        y: ship.y - laserHeight
+                    });
+                }
+                playLaserSound();
+            }
+            for (let allyShip of allyShips) {
+                if (allyShip && allyShip.alive && !allyShip.destroyed) {
+                    for (let i = 0; i < n; i++) {
+                        let offset = (i - (n - 1) / 2) * spread;
+                        lasers.push({
+                            x: allyShip.x + allyShip.width / 2 - laserWidth / 2 + offset,
+                            y: allyShip.y - laserHeight
+                        });
+                    }
+                    playLaserSound();
+                }
             }
         } else {
-            lasers.push({
-                x: ship.x + ship.width / 2 - laserWidth / 2,
-                y: ship.y - laserHeight
-            });
+            if (ship.alive && !ship.destroyed) {
+                lasers.push({
+                    x: ship.x + ship.width / 2 - laserWidth / 2,
+                    y: ship.y - laserHeight
+                });
+                playLaserSound();
+            }
+            for (let allyShip of allyShips) {
+                if (allyShip && allyShip.alive && !allyShip.destroyed) {
+                    lasers.push({
+                        x: allyShip.x + allyShip.width / 2 - laserWidth / 2,
+                        y: allyShip.y - laserHeight
+                    });
+                    playLaserSound();
+                }
+            }
         }
         canShoot = false;
         lastShootTime = Date.now();
@@ -700,17 +1143,300 @@ setInterval(() => {
 }, 20);
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') moveLeft = true;
-    if (e.key === 'ArrowRight') moveRight = true;
-    if (e.key === 'o' || e.key === 'O') {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') moveLeft = true;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') moveRight = true;
+    // Reiniciar solo con Ctrl+R
+    if ((e.key === 'r' || e.key === 'R') && e.ctrlKey) {
         if (gameOver) {
             resetGame();
         }
     }
 });
 document.addEventListener('keyup', (e) => {
-    if (e.key === 'ArrowLeft') moveLeft = false;
-    if (e.key === 'ArrowRight') moveRight = false;
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') moveLeft = false;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') moveRight = false;
 });
+
+function createShipDestructionFragments() {
+    shipDestructionFragments = [];
+    const cx = ship.x + ship.width / 2;
+    const cy = ship.y + ship.height / 2;
+    for (let i = 0; i < 60; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 5;
+        const color = Math.random() < 0.5 ?
+            `rgba(${180 + Math.random()*75},${30 + Math.random()*30},${30 + Math.random()*30},${0.85 - Math.random()*0.3})` : // rojo
+            `rgba(${120 + Math.random()*80},${120 + Math.random()*80},${120 + Math.random()*80},${0.7 - Math.random()*0.2})`; // gris
+        shipDestructionFragments.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: 2 + Math.random() * 3.5,
+            color: color,
+            alpha: 1.0,
+            decay: 0.012 + Math.random() * 0.012
+        });
+    }
+}
+
+function updateShipDestructionFragments() {
+    for (let frag of shipDestructionFragments) {
+        frag.x += frag.vx;
+        frag.y += frag.vy;
+        frag.alpha -= frag.decay;
+        frag.vx *= 0.98;
+        frag.vy *= 0.98;
+    }
+    shipDestructionFragments = shipDestructionFragments.filter(frag => frag.alpha > 0 && frag.y < canvas.height);
+}
+
+function drawShipDestructionFragments() {
+    for (let frag of shipDestructionFragments) {
+        ctx.save();
+        ctx.globalAlpha = frag.alpha;
+        ctx.fillStyle = frag.color;
+        ctx.beginPath();
+        ctx.arc(frag.x, frag.y, frag.radius, 0, Math.PI * 2);
+        ctx.shadowColor = frag.color;
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
+}
+
+function createAllyShip() {
+    const newAllyShip = {
+        width: ship.width,
+        height: ship.height,
+        x: ship.x + 100 + (allyShips.length * 80), // Posición escalonada
+        y: ship.y,
+        speed: ship.speed,
+        color: '#0d47a1', // azul oscuro
+        cockpitColor: '#263238', // negro azulado
+        wingColor: '#1976d2', // azul más claro
+        fireColor: '#00eaff',
+        laserColor: '#00eaff',
+        alive: true,
+        destroyed: false,
+        explosionFrame: 0
+    };
+    allyShips.push(newAllyShip);
+}
+
+function drawAllyShips() {
+    for (let allyShip of allyShips) {
+        if (!allyShip || !allyShip.alive) continue;
+        ctx.save();
+        ctx.translate(allyShip.x + allyShip.width / 2, allyShip.y + allyShip.height / 2);
+        // Cuerpo principal (azul con bordes neón)
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(18, 16);
+        ctx.lineTo(0, 10);
+        ctx.lineTo(-18, 16);
+        ctx.closePath();
+        ctx.fillStyle = allyShip.color;
+        ctx.shadowColor = '#00eaff';
+        ctx.shadowBlur = 18;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Borde exterior azul neón
+        ctx.save();
+        ctx.strokeStyle = '#00eaff';
+        ctx.lineWidth = 2.5;
+        ctx.globalAlpha = 0.7;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        // Cabina (negro azulado con brillo)
+        ctx.beginPath();
+        ctx.ellipse(0, -4, 7, 10, 0, 0, Math.PI * 2);
+        ctx.fillStyle = allyShip.cockpitColor;
+        ctx.globalAlpha = 0.92;
+        ctx.shadowColor = '#00eaff';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        // Alas (azul claro con borde azul neón)
+        ctx.beginPath();
+        ctx.moveTo(-18, 16);
+        ctx.lineTo(-28, 24);
+        ctx.lineTo(-10, 12);
+        ctx.closePath();
+        ctx.fillStyle = allyShip.wingColor;
+        ctx.fill();
+        ctx.save();
+        ctx.strokeStyle = '#00eaff';
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.5;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        ctx.beginPath();
+        ctx.moveTo(18, 16);
+        ctx.lineTo(28, 24);
+        ctx.lineTo(10, 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.save();
+        ctx.strokeStyle = '#00eaff';
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.5;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        // Fuego trasero azul neón
+        let fuegoLong = 38 + Math.sin(Date.now()/60)*6 + Math.random()*6;
+        let fuegoAncho = 18 + Math.sin(Date.now()/80)*3 + Math.random()*2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(-fuegoAncho/2, 18);
+        ctx.lineTo(0, fuegoLong);
+        ctx.lineTo(fuegoAncho/2, 18);
+        ctx.closePath();
+        let gradFuego = ctx.createLinearGradient(0, 18, 0, fuegoLong);
+        gradFuego.addColorStop(0, 'rgba(0,255,255,0.7)');
+        gradFuego.addColorStop(0.3, 'rgba(0,180,255,0.5)');
+        gradFuego.addColorStop(0.7, 'rgba(0,80,255,0.3)');
+        gradFuego.addColorStop(1, 'rgba(255,255,255,0.1)');
+        ctx.fillStyle = gradFuego;
+        ctx.shadowColor = '#00eaff';
+        ctx.shadowBlur = 32;
+        ctx.globalAlpha = 0.85;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(-5, 18);
+        ctx.lineTo(0, fuegoLong - 10);
+        ctx.lineTo(5, 18);
+        ctx.closePath();
+        let gradNucleo = ctx.createLinearGradient(0, 18, 0, fuegoLong-10);
+        gradNucleo.addColorStop(0, 'rgba(255,255,255,0.95)');
+        gradNucleo.addColorStop(1, 'rgba(0,255,255,0.2)');
+        ctx.fillStyle = gradNucleo;
+        ctx.globalAlpha = 0.7;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        ctx.restore();
+    }
+}
+
+function updateAllyShips() {
+    for (let allyShip of allyShips) {
+        if (!allyShip || !allyShip.alive) continue;
+        if (moveLeft) {
+            allyShip.x -= allyShip.speed;
+            if (allyShip.x < 0) allyShip.x = 0;
+        }
+        if (moveRight) {
+            allyShip.x += allyShip.speed;
+            if (allyShip.x + allyShip.width > canvas.width) allyShip.x = canvas.width - allyShip.width;
+        }
+    }
+}
+
+// Dibuja el escudo alrededor de todas las naves
+function drawShield() {
+    if (!shieldActive) return;
+    // Escudo nave principal
+    ctx.save();
+    ctx.translate(ship.x + ship.width / 2, ship.y + ship.height / 2);
+    ctx.beginPath();
+    ctx.arc(0, 0, 32, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,255,255,0.7)';
+    ctx.lineWidth = 6;
+    ctx.shadowColor = '#00eaff';
+    ctx.shadowBlur = 18;
+    ctx.globalAlpha = 0.7 + 0.2 * Math.sin(Date.now()/120);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    // Escudo naves aliadas
+    for (let allyShip of allyShips) {
+        if (allyShip && allyShip.alive) {
+            ctx.save();
+            ctx.translate(allyShip.x + allyShip.width / 2, allyShip.y + allyShip.height / 2);
+            ctx.beginPath();
+            ctx.arc(0, 0, 32, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0,255,255,0.7)';
+            ctx.lineWidth = 6;
+            ctx.shadowColor = '#00eaff';
+            ctx.shadowBlur = 18;
+            ctx.globalAlpha = 0.7 + 0.2 * Math.sin(Date.now()/120);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+    }
+}
+
+// Dibuja el botón de escudo con contador de usos
+function drawShieldButton() {
+    if (shieldUses <= 0) return;
+    const btnX = canvas.width - 110;
+    const btnY = canvas.height - 60;
+    const btnW = 90;
+    const btnH = 40;
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#222';
+    ctx.strokeStyle = '#00eaff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = 'bold 16px Arial';
+    ctx.fillStyle = '#00eaff';
+    ctx.globalAlpha = 1;
+    ctx.fillText(`ESCUDO (${shieldUses})`, btnX + 8, btnY + 26);
+    ctx.restore();
+}
+
+// Detectar click en el botón de escudo - sin tiempo límite
+canvas.addEventListener('mousedown', (e) => {
+    if (shieldUses <= 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const btnX = canvas.width - 110;
+    const btnY = canvas.height - 60;
+    const btnW = 90;
+    const btnH = 40;
+    if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+        shieldActive = true;
+        shieldUses--;
+        playShieldActivateSound();
+    }
+});
+
+// Actualizar estado del escudo - solo se desactiva al chocar
+function updateShield() {
+    // El escudo no se desactiva por tiempo, solo al chocar
+    // if (shieldActive && Date.now() > shieldEndTime) {
+    //     shieldActive = false;
+    // }
+}
+
+// Inicializar audio al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    initAudio();
+});
+
+// Inicializar audio al hacer clic (para navegadores que requieren interacción del usuario)
+document.addEventListener('click', () => {
+    if (!audioContext) {
+        initAudio();
+    }
+}, { once: true });
 
 requestAnimationFrame(gameLoop); 
