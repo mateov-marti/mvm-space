@@ -82,177 +82,6 @@ let shieldEndTime = 0;
 // Array de naves aliadas (múltiples naves)
 let allyShips = [];
 
-// Sistema de audio
-let audioContext;
-let masterGain;
-
-// Inicializar audio
-function initAudio() {
-    try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        masterGain = audioContext.createGain();
-        masterGain.gain.value = 0.3; // Volumen general
-        masterGain.connect(audioContext.destination);
-    } catch (e) {
-        console.log('Audio no disponible');
-    }
-}
-
-// Efecto de sonido para disparo láser
-function playLaserSound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.1);
-    oscillator.type = 'sawtooth';
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.1);
-}
-
-// Efecto de sonido para explosión
-function playExplosionSound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    const filter = audioContext.createBiquadFilter();
-    
-    oscillator.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
-    oscillator.type = 'sawtooth';
-    
-    filter.frequency.setValueAtTime(2000, audioContext.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
-    filter.type = 'lowpass';
-    
-    gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-}
-
-// Efecto de sonido para colisión con escudo
-function playShieldSound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-    oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.05);
-    oscillator.frequency.setValueAtTime(400, audioContext.currentTime + 0.1);
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.15);
-}
-
-// Efecto de sonido para activar escudo
-function playShieldActivateSound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.2);
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.2);
-}
-
-// Efecto de sonido para destrucción de obstáculo
-function playObstacleDestroySound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.15);
-    oscillator.type = 'square';
-    
-    gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.15);
-}
-
-// Efecto de sonido para game over
-function playGameOverSound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.5);
-    oscillator.type = 'sawtooth';
-    
-    gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
-}
-
-// Efecto de sonido para nave aliada
-function playAllyShipSound() {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(masterGain);
-    
-    oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
-    oscillator.frequency.setValueAtTime(700, audioContext.currentTime + 0.1);
-    oscillator.frequency.setValueAtTime(500, audioContext.currentTime + 0.2);
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.2);
-}
-
 function drawShip() {
     if (!ship.alive) return;
     if (ship.destroyed) {
@@ -834,19 +663,16 @@ function checkCollisions() {
                     createObstacleDestructionFragments(obs);
                     obstacles.splice(obstacles.indexOf(obs), 1);
                     shieldActive = false;
-                    playShieldSound();
                     continue;
                 }
                 ship.destroyed = true;
                 ship.alive = false;
                 ship.explosionFrame = 0;
                 createShipDestructionFragments();
-                playExplosionSound();
                 setTimeout(() => {
                     triggerObstaclesDestruccionNatural(() => {
                         setTimeout(() => { 
                             gameOver = allyShips.every(s => !s.alive);
-                            if (gameOver) playGameOverSound();
                         }, 700);
                     });
                 }, 100);
@@ -867,13 +693,11 @@ function checkCollisions() {
                         createObstacleDestructionFragments(obs);
                         obstacles.splice(obstacles.indexOf(obs), 1);
                         shieldActive = false;
-                        playShieldSound();
                         continue;
                     }
                     allyShip.destroyed = true;
                     allyShip.alive = false;
                     allyShip.explosionFrame = 0;
-                    playExplosionSound();
                     break;
                 }
             }
@@ -913,21 +737,15 @@ function checkCollisions() {
                     totalDestroyed++;
                     if (totalDestroyed % 10 === 0) {
                         createChaserRocks();
-                        playAllyShipSound();
-                        if (laserMultiplier < 40) {
-                            laserMultiplier = Math.min(laserMultiplier * 2, 40);
-                        }
                     }
                     if (totalDestroyed === 10 && !allyShips.length) {
                         createAllyShip();
-                        playAllyShipSound();
                     }
                     if (obs.isChaser) {
                         destroyedChaserRocks++;
                     }
                     createObstacleDestructionFragments(obs);
                     obstacles.splice(i, 1);
-                    playObstacleDestroySound();
                 }
                 lasers.splice(j, 1);
                 break;
@@ -1102,7 +920,6 @@ setInterval(() => {
                         y: ship.y - laserHeight
                     });
                 }
-                playLaserSound();
             }
             for (let allyShip of allyShips) {
                 if (allyShip && allyShip.alive && !allyShip.destroyed) {
@@ -1113,7 +930,6 @@ setInterval(() => {
                             y: allyShip.y - laserHeight
                         });
                     }
-                    playLaserSound();
                 }
             }
         } else {
@@ -1122,7 +938,6 @@ setInterval(() => {
                     x: ship.x + ship.width / 2 - laserWidth / 2,
                     y: ship.y - laserHeight
                 });
-                playLaserSound();
             }
             for (let allyShip of allyShips) {
                 if (allyShip && allyShip.alive && !allyShip.destroyed) {
@@ -1130,7 +945,6 @@ setInterval(() => {
                         x: allyShip.x + allyShip.width / 2 - laserWidth / 2,
                         y: allyShip.y - laserHeight
                     });
-                    playLaserSound();
                 }
             }
         }
@@ -1415,7 +1229,6 @@ canvas.addEventListener('mousedown', (e) => {
     if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
         shieldActive = true;
         shieldUses--;
-        playShieldActivateSound();
     }
 });
 
@@ -1426,17 +1239,5 @@ function updateShield() {
     //     shieldActive = false;
     // }
 }
-
-// Inicializar audio al cargar la página
-document.addEventListener('DOMContentLoaded', () => {
-    initAudio();
-});
-
-// Inicializar audio al hacer clic (para navegadores que requieren interacción del usuario)
-document.addEventListener('click', () => {
-    if (!audioContext) {
-        initAudio();
-    }
-}, { once: true });
 
 requestAnimationFrame(gameLoop); 
