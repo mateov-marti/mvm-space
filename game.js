@@ -82,6 +82,11 @@ let shieldEndTime = 0;
 // Array de naves aliadas (múltiples naves)
 let allyShips = [];
 
+// Boss final
+let boss = null;
+let bossActive = false;
+let bossLasers = [];
+
 function drawShip() {
     if (!ship.alive) return;
     if (ship.destroyed) {
@@ -317,14 +322,14 @@ function drawObstacle(obstacle) {
             ctx.lineTo(-obstacle.width/4, obstacle.height/4);
             ctx.stroke();
         } else {
-            ctx.strokeStyle = '#444';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(-obstacle.width/4, 0);
-            ctx.lineTo(obstacle.width/4, obstacle.height/4);
-            ctx.moveTo(0, -obstacle.height/4);
-            ctx.lineTo(0, obstacle.height/4);
-            ctx.stroke();
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-obstacle.width/4, 0);
+        ctx.lineTo(obstacle.width/4, obstacle.height/4);
+        ctx.moveTo(0, -obstacle.height/4);
+        ctx.lineTo(0, obstacle.height/4);
+        ctx.stroke();
         }
     } else if (obstacle.type === 'car') {
         // Auto (rectángulo con detalles)
@@ -494,7 +499,7 @@ function updateObstacles() {
         if (obs.isChaser && obs.chaserSpeed) {
             obs.y += obs.chaserSpeed;
         } else {
-            obs.y += obstacleSpeed;
+        obs.y += obstacleSpeed;
         }
         if (obs.isChaser) {
             // Las rocas perseguidoras se mueven hacia la nave
@@ -703,6 +708,7 @@ function checkCollisions() {
             }
         }
     }
+    // Colisiones láser-obstáculo
     for (let i = obstacles.length - 1; i >= 0; i--) {
         for (let j = lasers.length - 1; j >= 0; j--) {
             const obs = obstacles[i];
@@ -715,6 +721,7 @@ function checkCollisions() {
             ) {
                 obs.hp--;
                 if (obs.hp > 0) {
+                    // Fragmentos de desmoronamiento
                     for (let k = 0; k < 4 + Math.random()*2; k++) {
                         const angle = Math.random() * Math.PI * 2;
                         const speed = 0.8 + Math.random() * 1.8;
@@ -735,8 +742,14 @@ function checkCollisions() {
                 }
                 if (obs.hp <= 0) {
                     totalDestroyed++;
-                    if (totalDestroyed % 10 === 0) {
+                    if (totalDestroyed === 50 && !bossActive) {
+                        createBoss();
+                    }
+                    if (totalDestroyed % 10 === 0 && totalDestroyed < 50) {
                         createChaserRocks();
+                        if (laserMultiplier < 40) {
+                            laserMultiplier = Math.min(laserMultiplier * 2, 40);
+                        }
                     }
                     if (totalDestroyed === 10 && !allyShips.length) {
                         createAllyShip();
@@ -821,6 +834,7 @@ function draw() {
     }
     drawShip();
     drawAllyShips();
+    drawBoss();
     drawShield();
     drawShieldButton();
 }
@@ -864,6 +878,9 @@ function resetGame() {
     shieldUses = 2;
     shieldEndTime = 0;
     allyShips = [];
+    boss = null;
+    bossActive = false;
+    bossLasers = [];
 }
 
 function updateStars() {
@@ -884,7 +901,11 @@ function gameLoop(timestamp) {
         
         ctx.fillStyle = '#fff';
         ctx.font = '40px Arial';
-        ctx.fillText('¡Game Over!', 90, canvas.height / 2);
+        if (boss && !boss.alive) {
+            ctx.fillText('¡VICTORIA!', 90, canvas.height / 2);
+        } else {
+            ctx.fillText('¡Game Over!', 90, canvas.height / 2);
+        }
         ctx.font = '20px Arial';
         ctx.fillText('Presiona Ctrl+R para reiniciar', 70, canvas.height / 2 + 40);
         return;
@@ -893,16 +914,24 @@ function gameLoop(timestamp) {
     update();
     updateStars();
     updateScreenExplosion(); // Actualizar explosión de pantalla
-    if (!lastObstacleTime || timestamp - lastObstacleTime > obstacleInterval) {
-        createObstacle();
-        lastObstacleTime = timestamp;
+    if (!bossActive) {
+        if (!lastObstacleTime || timestamp - lastObstacleTime > obstacleInterval) {
+            createObstacle();
+            lastObstacleTime = timestamp;
+        }
+        updateObstacles();
+    } else {
+        updateBoss();
+        updateBossLasers();
     }
-    updateObstacles();
     updateLasers();
     updateFragments();
     updateShipDestructionFragments(); // Actualizar fragmentos de destrucción de la nave
     updateShield();
     checkCollisions();
+    if (bossActive) {
+        checkBossCollisions();
+    }
     draw();
     requestAnimationFrame(gameLoop);
 }
@@ -913,12 +942,12 @@ setInterval(() => {
             let n = Math.max(laserMultiplier, powerUpActive ? 2 : 1);
             let spread = 16;
             if (ship.alive && !ship.destroyed) {
-                for (let i = 0; i < n; i++) {
-                    let offset = (i - (n - 1) / 2) * spread;
-                    lasers.push({
-                        x: ship.x + ship.width / 2 - laserWidth / 2 + offset,
-                        y: ship.y - laserHeight
-                    });
+            for (let i = 0; i < n; i++) {
+                let offset = (i - (n - 1) / 2) * spread;
+                lasers.push({
+                    x: ship.x + ship.width / 2 - laserWidth / 2 + offset,
+                    y: ship.y - laserHeight
+                });
                 }
             }
             for (let allyShip of allyShips) {
@@ -934,10 +963,10 @@ setInterval(() => {
             }
         } else {
             if (ship.alive && !ship.destroyed) {
-                lasers.push({
-                    x: ship.x + ship.width / 2 - laserWidth / 2,
-                    y: ship.y - laserHeight
-                });
+            lasers.push({
+                x: ship.x + ship.width / 2 - laserWidth / 2,
+                y: ship.y - laserHeight
+            });
             }
             for (let allyShip of allyShips) {
                 if (allyShip && allyShip.alive && !allyShip.destroyed) {
@@ -1238,6 +1267,262 @@ function updateShield() {
     // if (shieldActive && Date.now() > shieldEndTime) {
     //     shieldActive = false;
     // }
+}
+
+// Crear el boss final
+function createBoss() {
+    boss = {
+        width: 120,
+        height: 80,
+        x: canvas.width / 2 - 60,
+        y: -80,
+        speed: 1.5,
+        hp: 100,
+        maxHp: 100,
+        alive: true,
+        destroyed: false,
+        explosionFrame: 0,
+        lastShootTime: 0,
+        shootCooldown: 800,
+        moveDirection: 1,
+        moveTimer: 0
+    };
+    bossActive = true;
+    
+    // Eliminar todos los obstáculos existentes
+    obstacles = [];
+    
+    // Crear dos naves aliadas para la batalla final
+    createAllyShip();
+    createAllyShip();
+    
+    // Asegurar que todas las naves estén vivas
+    ship.alive = true;
+    ship.destroyed = false;
+    ship.explosionFrame = 0;
+    for (let allyShip of allyShips) {
+        allyShip.alive = true;
+        allyShip.destroyed = false;
+        allyShip.explosionFrame = 0;
+    }
+}
+
+// Dibujar el boss
+function drawBoss() {
+    if (!boss || !boss.alive) return;
+    
+    ctx.save();
+    ctx.translate(boss.x + boss.width / 2, boss.y + boss.height / 2);
+    
+    // Cuerpo principal del boss (rojo oscuro)
+    ctx.beginPath();
+    ctx.moveTo(-boss.width/2, -boss.height/2);
+    ctx.lineTo(boss.width/2, -boss.height/2);
+    ctx.lineTo(boss.width/2 - 10, boss.height/2);
+    ctx.lineTo(-boss.width/2 + 10, boss.height/2);
+    ctx.closePath();
+    ctx.fillStyle = '#8b0000';
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 20;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    
+    // Borde rojo neón
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Cabina del boss
+    ctx.beginPath();
+    ctx.ellipse(0, -10, 25, 15, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff4444';
+    ctx.globalAlpha = 0.8;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    // Alas del boss
+    ctx.beginPath();
+    ctx.moveTo(-boss.width/2, 0);
+    ctx.lineTo(-boss.width/2 - 30, 20);
+    ctx.lineTo(-boss.width/2 + 10, 10);
+    ctx.closePath();
+    ctx.fillStyle = '#660000';
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.moveTo(boss.width/2, 0);
+    ctx.lineTo(boss.width/2 + 30, 20);
+    ctx.lineTo(boss.width/2 - 10, 10);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Cañones del boss
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(-15, boss.height/2, 8, 15);
+    ctx.fillRect(7, boss.height/2, 8, 15);
+    
+    // Barra de vida del boss
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-boss.width/2, -boss.height/2 - 15, boss.width, 8);
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(-boss.width/2, -boss.height/2 - 15, boss.width * (boss.hp/boss.maxHp), 8);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    
+    ctx.restore();
+}
+
+// Actualizar el boss
+function updateBoss() {
+    if (!boss || !boss.alive) return;
+    
+    // Movimiento del boss
+    boss.moveTimer++;
+    if (boss.moveTimer > 120) {
+        boss.moveDirection *= -1;
+        boss.moveTimer = 0;
+    }
+    
+    boss.x += boss.speed * boss.moveDirection;
+    
+    // Limitar movimiento del boss
+    if (boss.x < 0) boss.x = 0;
+    if (boss.x + boss.width > canvas.width) boss.x = canvas.width - boss.width;
+    
+    // Disparar del boss
+    if (Date.now() - boss.lastShootTime > boss.shootCooldown) {
+        bossLasers.push({
+            x: boss.x + boss.width/2 - 4,
+            y: boss.y + boss.height,
+            width: 8,
+            height: 20,
+            speed: 4
+        });
+        boss.lastShootTime = Date.now();
+    }
+}
+
+// Dibujar láseres del boss
+function drawBossLasers() {
+    for (let laser of bossLasers) {
+        ctx.save();
+        ctx.fillStyle = '#ff0000';
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 15;
+        ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+}
+
+// Actualizar láseres del boss
+function updateBossLasers() {
+    for (let laser of bossLasers) {
+        laser.y += laser.speed;
+    }
+    bossLasers = bossLasers.filter(laser => laser.y < canvas.height);
+}
+
+// Verificar colisiones con el boss
+function checkBossCollisions() {
+    if (!boss || !boss.alive) return;
+    
+    // Colisión láseres del jugador con el boss
+    for (let i = lasers.length - 1; i >= 0; i--) {
+        const laser = lasers[i];
+        if (
+            laser.x < boss.x + boss.width &&
+            laser.x + laserWidth > boss.x &&
+            laser.y < boss.y + boss.height &&
+            laser.y + laserHeight > boss.y
+        ) {
+            boss.hp--;
+            if (boss.hp <= 0) {
+                boss.destroyed = true;
+                boss.alive = false;
+                bossActive = false;
+                // Crear explosión masiva del boss
+                createBossExplosion();
+                setTimeout(() => {
+                    gameOver = true;
+                }, 2000);
+            }
+            lasers.splice(i, 1);
+        }
+    }
+    
+    // Colisión láseres del boss con las naves
+    for (let i = bossLasers.length - 1; i >= 0; i--) {
+        const bossLaser = bossLasers[i];
+        
+        // Colisión con nave principal
+        if (ship.alive && !ship.destroyed) {
+            if (
+                bossLaser.x < ship.x + ship.width &&
+                bossLaser.x + bossLaser.width > ship.x &&
+                bossLaser.y < ship.y + ship.height &&
+                bossLaser.y + bossLaser.height > ship.y
+            ) {
+                if (shieldActive) {
+                    bossLasers.splice(i, 1);
+                    shieldActive = false;
+                    continue;
+                }
+                ship.destroyed = true;
+                ship.alive = false;
+                ship.explosionFrame = 0;
+                createShipDestructionFragments();
+                bossLasers.splice(i, 1);
+                continue;
+            }
+        }
+        
+        // Colisión con naves aliadas
+        for (let allyShip of allyShips) {
+            if (allyShip && allyShip.alive && !allyShip.destroyed) {
+                if (
+                    bossLaser.x < allyShip.x + allyShip.width &&
+                    bossLaser.x + bossLaser.width > allyShip.x &&
+                    bossLaser.y < allyShip.y + allyShip.height &&
+                    bossLaser.y + bossLaser.height > allyShip.y
+                ) {
+                    if (shieldActive) {
+                        bossLasers.splice(i, 1);
+                        shieldActive = false;
+                        break;
+                    }
+                    allyShip.destroyed = true;
+                    allyShip.alive = false;
+                    allyShip.explosionFrame = 0;
+                    bossLasers.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// Crear explosión masiva del boss
+function createBossExplosion() {
+    for (let i = 0; i < 100; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 8;
+        const color = Math.random() < 0.5 ?
+            `rgba(255, 0, 0, ${0.8 - Math.random()*0.3})` :
+            `rgba(255, 255, 0, ${0.7 - Math.random()*0.2})`;
+        fragments.push({
+            x: boss.x + boss.width/2,
+            y: boss.y + boss.height/2,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: 3 + Math.random() * 4,
+            color: color,
+            alpha: 1.0,
+            decay: 0.008 + Math.random() * 0.008
+        });
+    }
 }
 
 requestAnimationFrame(gameLoop); 
