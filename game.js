@@ -22,7 +22,7 @@ const ship = {
 
 // Láseres
 let lasers = [];
-const laserSpeed = 14; // Antes: 8. Ahora los disparos van más rápido
+let laserSpeed = 14; // Antes: 8. Ahora los disparos van más rápido
 const laserWidth = 4;
 const laserHeight = 18;
 let canShoot = true;
