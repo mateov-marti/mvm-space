@@ -15,12 +15,14 @@ const ship = {
     laserColor: '#ff2222', // Rojo intenso
     alive: true,
     destroyed: false,
-    explosionFrame: 0
+    explosionFrame: 0,
+    maxHp: 15, // 15% de vida
+    hp: 0 // vida actual, inicia en 0
 };
 
 // Láseres
 let lasers = [];
-const laserSpeed = 8;
+const laserSpeed = 14; // Antes: 8. Ahora los disparos van más rápido
 const laserWidth = 4;
 const laserHeight = 18;
 let canShoot = true;
@@ -59,6 +61,7 @@ let shooting = false;
 
 // Estado del juego
 let gameOver = false;
+let victory = false;
 
 let destroyedRocks = 0;
 let powerUpActive = false;
@@ -699,10 +702,22 @@ function checkCollisions() {
                     createObstacleDestructionFragments(obs);
                     obstacles.splice(i, 1);
                 } else {
-                    ship.destroyed = true;
-                    ship.explosionFrame = 0;
-                    createShipDestructionFragments(ship);
-                    ship.alive = false;
+                    if (bossActive && ship.hp > 0) {
+                        if (ship.hp > 1) {
+                            ship.hp -= 1;
+                        } else {
+                            ship.hp = 0;
+                            ship.destroyed = true;
+                            ship.explosionFrame = 0;
+                            createShipDestructionFragments(ship);
+                            ship.alive = false;
+                        }
+                    } else {
+                        ship.destroyed = true;
+                        ship.explosionFrame = 0;
+                        createShipDestructionFragments(ship);
+                        ship.alive = false;
+                    }
                 }
                 break;
             }
@@ -750,6 +765,7 @@ function checkCollisions() {
                         allyShip.explosionFrame = 0;
                         createShipDestructionFragments(allyShip);
                         allyShip.alive = false;
+                        gameOver = true; // Activar game over al destruirse la nave
                     }
                     break;
                 }
@@ -826,7 +842,36 @@ function drawScore() {
     ctx.shadowColor = '#00bcd4';
     ctx.shadowBlur = 6;
     ctx.fillText(`Total: ${totalDestroyed}  Radiactivas: ${destroyedChaserRocks}`, 18, 32);
+    // Barra de vida de la nave
+    ctx.fillStyle = '#222';
+    ctx.fillRect(18, 44, 120, 12);
+    ctx.fillStyle = '#00eaff';
+    ctx.fillRect(18, 44, 120 * (ship.hp / ship.maxHp), 12);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(18, 44, 120, 12);
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`Vida: ${ship.hp}/${ship.maxHp}`, 22, 54);
     ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
+function drawShipHpBar() {
+    const barWidth = 160;
+    const barHeight = 16;
+    const x = canvas.width / 2 - barWidth / 2;
+    const y = 18; // Arriba de la pantalla
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = '#00eaff';
+    ctx.fillRect(x, y, barWidth * (ship.hp / ship.maxHp), barHeight);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, barWidth, barHeight);
+    ctx.globalAlpha = 1;
     ctx.restore();
 }
 
@@ -855,6 +900,7 @@ function draw() {
     }
     drawFuturisticOverlay();
     drawScore();
+    if (bossActive) drawShipHpBar();
     for (let frag of fragments) {
         drawFragment(frag);
     }
@@ -885,6 +931,10 @@ function update() {
     if (ship.destroyed && ship.explosionFrame < 15) {
         ship.explosionFrame++;
     }
+    // Activar gameOver solo después de la animación de explosión
+    if (ship.destroyed && ship.explosionFrame >= 15 && !gameOver) {
+        gameOver = true;
+    }
     updateAllyShips();
     updateAutoPilot();
 }
@@ -895,6 +945,7 @@ function resetGame() {
     ship.destroyed = false;
     ship.explosionFrame = 0;
     ship.alive = true;
+    ship.hp = 0;
     obstacles = [];
     lasers = [];
     specialLasers = [];
@@ -919,6 +970,7 @@ function resetGame() {
     autoPilotActive = false;
     autoPilotTargetX = 0;
     specialLaserActive = false;
+    victory = false;
 }
 
 function updateStars() {
@@ -939,8 +991,8 @@ function gameLoop(timestamp) {
         
         ctx.fillStyle = '#fff';
         ctx.font = '40px Arial';
-        if (boss && !boss.alive) {
-            ctx.fillText('¡VICTORIA!', 90, canvas.height / 2);
+        if (victory) {
+            ctx.fillText('¡HAS GANADO!', 70, canvas.height / 2);
         } else {
             ctx.fillText('¡Game Over!', 90, canvas.height / 2);
         }
@@ -953,7 +1005,7 @@ function gameLoop(timestamp) {
     updateStars();
     updateScreenExplosion(); // Actualizar explosión de pantalla
     // Los obstáculos siguen apareciendo incluso con el boss
-    if (!lastObstacleTime || timestamp - lastObstacleTime > obstacleInterval) {
+    if (!bossActive && (!lastObstacleTime || timestamp - lastObstacleTime > obstacleInterval)) {
         createObstacle();
         lastObstacleTime = timestamp;
     }
@@ -980,56 +1032,17 @@ function gameLoop(timestamp) {
 
 setInterval(() => {
     if (!gameOver && canShoot) {
-        // Contar láseres activos por nave
-        let shipLasers = lasers.filter(laser => 
-            laser.x >= ship.x - 10 && laser.x <= ship.x + ship.width + 10
-        ).length;
-        
-        let allyLasers = [];
-        for (let allyShip of allyShips) {
-            if (allyShip && allyShip.alive && !allyShip.destroyed) {
-                let allyShipLasers = lasers.filter(laser => 
-                    laser.x >= allyShip.x - 10 && laser.x <= allyShip.x + allyShip.width + 10
-                ).length;
-                allyLasers.push(allyShipLasers);
-            }
-        }
-        
-        // Disparar solo si hay menos de 2 láseres por nave
-        if (powerUpActive || laserMultiplier > 1) {
-            let n = Math.min(Math.max(laserMultiplier, powerUpActive ? 2 : 1), 2); // Máximo 2 láseres
-            let spread = 16;
-            if (ship.alive && !ship.destroyed && shipLasers < 2) {
-                for (let i = 0; i < n; i++) {
-                    let offset = (i - (n - 1) / 2) * spread;
-                    lasers.push({
-                        x: ship.x + ship.width / 2 - laserWidth / 2 + offset,
-                        y: ship.y - laserHeight
-                    });
-                }
-            }
-            for (let i = 0; i < allyShips.length; i++) {
-                let allyShip = allyShips[i];
-                if (allyShip && allyShip.alive && !allyShip.destroyed && allyLasers[i] < 2) {
-                    for (let j = 0; j < n; j++) {
-                        let offset = (j - (n - 1) / 2) * spread;
-                        lasers.push({
-                            x: allyShip.x + allyShip.width / 2 - laserWidth / 2 + offset,
-                            y: allyShip.y - laserHeight
-                        });
-                    }
-                }
-            }
+        if ((autoPilotActive && obstacles.some(o => o.isChaser)) || bossActive) {
+            createSpecialLaser();
         } else {
-            if (ship.alive && !ship.destroyed && shipLasers < 2) {
+            if (ship.alive && !ship.destroyed) {
                 lasers.push({
                     x: ship.x + ship.width / 2 - laserWidth / 2,
                     y: ship.y - laserHeight
                 });
             }
-            for (let i = 0; i < allyShips.length; i++) {
-                let allyShip = allyShips[i];
-                if (allyShip && allyShip.alive && !allyShip.destroyed && allyLasers[i] < 2) {
+            for (let allyShip of allyShips) {
+                if (allyShip && allyShip.alive && !allyShip.destroyed) {
                     lasers.push({
                         x: allyShip.x + allyShip.width / 2 - laserWidth / 2,
                         y: allyShip.y - laserHeight
@@ -1037,19 +1050,13 @@ setInterval(() => {
                 }
             }
         }
-        
-        // Disparo especial para piloto automático cuando hay piedras radiactivas
-        if (autoPilotActive && obstacles.some(o => o.isChaser)) {
-            createSpecialLaser();
-        }
-        
         canShoot = false;
         lastShootTime = Date.now();
     }
     if (!canShoot && Date.now() - lastShootTime > shootCooldown) {
         canShoot = true;
     }
-}, 20);
+}, 200); // Ritmo tun tun tun (200ms)
 
 document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') moveLeft = true;
@@ -1353,6 +1360,8 @@ function createBoss() {
         targetY: 50 // Posición final en Y
     };
     bossActive = true;
+    // Inicializar vida de la nave solo cuando aparece el boss
+    ship.hp = ship.maxHp;
     
     // NO eliminar obstáculos existentes - que sigan apareciendo
     // NO crear naves aliadas adicionales - mantener las existentes
@@ -1362,67 +1371,135 @@ function createBoss() {
 // Dibujar el boss
 function drawBoss() {
     if (!boss || !boss.alive) return;
-    
     ctx.save();
     ctx.translate(boss.x + boss.width / 2, boss.y + boss.height / 2);
-    
-    // Cuerpo principal del boss (rojo oscuro)
+
+    // Sombra y resplandor general
+    ctx.save();
+    ctx.shadowColor = '#00eaff';
+    ctx.shadowBlur = 60;
+    ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    ctx.moveTo(-boss.width/2, -boss.height/2);
-    ctx.lineTo(boss.width/2, -boss.height/2);
-    ctx.lineTo(boss.width/2 - 10, boss.height/2);
-    ctx.lineTo(-boss.width/2 + 10, boss.height/2);
-    ctx.closePath();
-    ctx.fillStyle = '#8b0000';
-    ctx.shadowColor = '#ff0000';
-    ctx.shadowBlur = 20;
+    ctx.arc(0, 20, boss.width * 0.7, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,255,255,0.18)';
+    ctx.fill();
+    ctx.restore();
+
+    // Cuerpo principal: núcleo central con gradiente neón
+    let gradCuerpo = ctx.createRadialGradient(0, 0, 30, 0, 0, boss.width/2);
+    gradCuerpo.addColorStop(0, '#222');
+    gradCuerpo.addColorStop(0.4, '#00eaff');
+    gradCuerpo.addColorStop(0.7, '#ffe600');
+    gradCuerpo.addColorStop(1, '#111');
+    ctx.beginPath();
+    ctx.ellipse(0, 0, boss.width/2, boss.height/2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = gradCuerpo;
+    ctx.shadowColor = '#ffe600';
+    ctx.shadowBlur = 30;
     ctx.fill();
     ctx.shadowBlur = 0;
-    
-    // Borde rojo neón
-    ctx.strokeStyle = '#ff0000';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    
-    // Cabina del boss
-    ctx.beginPath();
-    ctx.ellipse(0, -10, 25, 15, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff4444';
-    ctx.globalAlpha = 0.8;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    
-    // Alas del boss
-    ctx.beginPath();
-    ctx.moveTo(-boss.width/2, 0);
-    ctx.lineTo(-boss.width/2 - 30, 20);
-    ctx.lineTo(-boss.width/2 + 10, 10);
-    ctx.closePath();
-    ctx.fillStyle = '#660000';
-    ctx.fill();
-    
-    ctx.beginPath();
-    ctx.moveTo(boss.width/2, 0);
-    ctx.lineTo(boss.width/2 + 30, 20);
-    ctx.lineTo(boss.width/2 - 10, 10);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Cañones del boss
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(-15, boss.height/2, 8, 15);
-    ctx.fillRect(7, boss.height/2, 8, 15);
-    
-    // Barra de vida del boss
+
+    // Núcleo energético central
     ctx.save();
-    ctx.globalAlpha = 0.8;
-    ctx.fillStyle = '#222';
-    ctx.fillRect(-boss.width/2, -boss.height/2 - 15, boss.width, 8);
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(-boss.width/2, -boss.height/2 - 15, boss.width * (boss.hp/boss.maxHp), 8);
+    let gradNucleo = ctx.createRadialGradient(0, 0, 0, 0, 0, 38);
+    gradNucleo.addColorStop(0, '#fff');
+    gradNucleo.addColorStop(0.4, '#00eaff');
+    gradNucleo.addColorStop(1, 'rgba(0,255,255,0)');
+    ctx.beginPath();
+    ctx.arc(0, 0, 38, 0, Math.PI * 2);
+    ctx.fillStyle = gradNucleo;
+    ctx.globalAlpha = 0.85 + 0.1 * Math.sin(Date.now()/200);
+    ctx.fill();
     ctx.globalAlpha = 1;
     ctx.restore();
-    
+
+    // Anillos giratorios exteriores
+    for (let i = 0; i < 3; i++) {
+        ctx.save();
+        ctx.rotate(Date.now()/1200 + i * Math.PI/3);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, boss.width/2 + 18 + i*12, boss.height/2 + 8 + i*8, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = i % 2 === 0 ? '#00eaff' : '#ffe600';
+        ctx.lineWidth = 3.5 - i;
+        ctx.globalAlpha = 0.18 + 0.08 * Math.sin(Date.now()/600 + i);
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = 16;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+
+    // Alas/faldones laterales con detalles neón
+    ctx.save();
+    ctx.rotate(Math.sin(Date.now()/800)*0.08);
+    ctx.beginPath();
+    ctx.moveTo(-boss.width/2, 0);
+    ctx.lineTo(-boss.width/2 - 50, 40);
+    ctx.lineTo(-boss.width/2 + 30, boss.height/2 - 10);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,238,255,0.25)';
+    ctx.shadowColor = '#00eaff';
+    ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.save();
+    ctx.rotate(-Math.sin(Date.now()/800)*0.08);
+    ctx.beginPath();
+    ctx.moveTo(boss.width/2, 0);
+    ctx.lineTo(boss.width/2 + 50, 40);
+    ctx.lineTo(boss.width/2 - 30, boss.height/2 - 10);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,230,0,0.18)';
+    ctx.shadowColor = '#ffe600';
+    ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Detalles de "circuitos" y líneas de energía
+    for (let i = 0; i < 8; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2 * i) / 8 + Math.sin(Date.now()/1000 + i));
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(boss.width/2 + 18, 0);
+        ctx.strokeStyle = i % 2 === 0 ? '#00eaff' : '#ffe600';
+        ctx.lineWidth = 2.2;
+        ctx.globalAlpha = 0.22 + 0.12 * Math.abs(Math.sin(Date.now()/700 + i));
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+
+    // Cabina central brillante
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(0, -boss.height/4, 38, 22, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.7;
+    ctx.shadowColor = '#00eaff';
+    ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Barra de vida del boss
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-boss.width/2, -boss.height/2 - 22, boss.width, 12);
+    ctx.fillStyle = '#00eaff';
+    ctx.fillRect(-boss.width/2, -boss.height/2 - 22, boss.width * (boss.hp/boss.maxHp), 12);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-boss.width/2, -boss.height/2 - 22, boss.width, 12);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
     ctx.restore();
 }
 
@@ -1434,58 +1511,30 @@ function updateBoss() {
     if (boss.y < boss.targetY) {
         boss.y += boss.speed;
     } else {
+        // Movimiento hacia abajo constante
+        boss.y += boss.speed * 0.7; // Puedes ajustar la velocidad aquí
         // Movimiento lateral una vez en posición
         boss.moveTimer++;
         if (boss.moveTimer > 120) {
             boss.moveDirection *= -1;
             boss.moveTimer = 0;
         }
-        
         boss.x += boss.speed * boss.moveDirection;
-        
-        // Limitar movimiento del boss
         if (boss.x < 0) boss.x = 0;
         if (boss.x + boss.width > canvas.width) boss.x = canvas.width - boss.width;
     }
-    
-    // Disparar del boss
-    if (Date.now() - boss.lastShootTime > boss.shootCooldown) {
-        bossLasers.push({
-            x: boss.x + boss.width/2 - 4,
-            y: boss.y + boss.height,
-            width: 8,
-            height: 20,
-            speed: 4
-        });
-        boss.lastShootTime = Date.now();
-    }
+    // (Eliminado: disparo de láser)
 }
 
 // Dibujar láseres del boss
-function drawBossLasers() {
-    for (let laser of bossLasers) {
-        ctx.save();
-        ctx.fillStyle = '#ff0000';
-        ctx.shadowColor = '#ff0000';
-        ctx.shadowBlur = 15;
-        ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
-        ctx.shadowBlur = 0;
-        ctx.restore();
-    }
-}
+function drawBossLasers() {}
 
 // Actualizar láseres del boss
-function updateBossLasers() {
-    for (let laser of bossLasers) {
-        laser.y += laser.speed;
-    }
-    bossLasers = bossLasers.filter(laser => laser.y < canvas.height);
-}
+function updateBossLasers() {}
 
 // Verificar colisiones con el boss
 function checkBossCollisions() {
     if (!boss || !boss.alive) return;
-    
     // Colisión láseres del jugador con el boss
     for (let i = lasers.length - 1; i >= 0; i--) {
         const laser = lasers[i];
@@ -1500,62 +1549,52 @@ function checkBossCollisions() {
                 boss.destroyed = true;
                 boss.alive = false;
                 bossActive = false;
-                // Crear explosión masiva del boss
                 createBossExplosion();
-                // NO terminar el juego - que continúe con obstáculos normales
+                // Marcar victoria
+                victory = true;
+                gameOver = true;
             }
             lasers.splice(i, 1);
         }
     }
-    
-    // Colisión láseres del boss con las naves
-    for (let i = bossLasers.length - 1; i >= 0; i--) {
-        const bossLaser = bossLasers[i];
-        
-        // Colisión con nave principal
-        if (ship.alive && !ship.destroyed) {
+    // Colisión física boss-nave principal
+    if (ship.alive && !ship.destroyed) {
+        if (
+            boss.x < ship.x + ship.width &&
+            boss.x + boss.width > ship.x &&
+            boss.y < ship.y + ship.height &&
+            boss.y + boss.height > ship.y
+        ) {
+            ship.destroyed = true;
+            ship.alive = false;
+            ship.explosionFrame = 0;
+            createShipDestructionFragments();
+            gameOver = true;
+            victory = false;
+        }
+    }
+    // Colisión física boss-naves aliadas
+    for (let allyShip of allyShips) {
+        if (allyShip && allyShip.alive && !allyShip.destroyed) {
             if (
-                bossLaser.x < ship.x + ship.width &&
-                bossLaser.x + bossLaser.width > ship.x &&
-                bossLaser.y < ship.y + ship.height &&
-                bossLaser.y + bossLaser.height > ship.y
+                boss.x < allyShip.x + allyShip.width &&
+                boss.x + boss.width > allyShip.x &&
+                boss.y < allyShip.y + allyShip.height &&
+                boss.y + boss.height > allyShip.y
             ) {
-                if (shieldActive) {
-                    bossLasers.splice(i, 1);
-                    shieldActive = false;
-                    continue;
-                }
-                ship.destroyed = true;
-                ship.alive = false;
-                ship.explosionFrame = 0;
-                createShipDestructionFragments();
-                bossLasers.splice(i, 1);
-                continue;
+                allyShip.destroyed = true;
+                allyShip.alive = false;
+                allyShip.explosionFrame = 0;
+                gameOver = true;
+                victory = false;
             }
         }
-        
-        // Colisión con naves aliadas
-        for (let allyShip of allyShips) {
-            if (allyShip && allyShip.alive && !allyShip.destroyed) {
-                if (
-                    bossLaser.x < allyShip.x + allyShip.width &&
-                    bossLaser.x + bossLaser.width > allyShip.x &&
-                    bossLaser.y < allyShip.y + allyShip.height &&
-                    bossLaser.y + bossLaser.height > allyShip.y
-                ) {
-                    if (shieldActive) {
-                        bossLasers.splice(i, 1);
-                        shieldActive = false;
-                        break;
-                    }
-                    allyShip.destroyed = true;
-                    allyShip.alive = false;
-                    allyShip.explosionFrame = 0;
-                    bossLasers.splice(i, 1);
-                    break;
-                }
-            }
-        }
+    }
+    // Si todas las naves están destruidas, game over
+    let allDestroyed = !ship.alive && allyShips.every(s => !s.alive);
+    if (allDestroyed) {
+        gameOver = true;
+        victory = false;
     }
 }
 
@@ -1657,7 +1696,7 @@ function updateAutoPilot() {
     }
 }
 
-// Dibujar botón de piloto automático
+// Dibuja el botón de piloto automático
 function drawAutoPilotButton() {
     const btnX = 20;
     const btnY = canvas.height - 60;
@@ -1714,8 +1753,7 @@ canvas.addEventListener('mousedown', (e) => {
 
 // Crear láser especial para piloto automático
 function createSpecialLaser() {
-    if (!autoPilotActive) return;
-    
+    if (!autoPilotActive && !bossActive) return;
     // Láser especial más ancho y potente
     specialLasers.push({
         x: ship.x + ship.width / 2 - 8,
@@ -1725,7 +1763,6 @@ function createSpecialLaser() {
         speed: 10,
         damage: 5 // Hace 5 veces más daño
     });
-    
     // Láseres especiales para naves aliadas también
     for (let allyShip of allyShips) {
         if (allyShip && allyShip.alive) {
@@ -1777,20 +1814,18 @@ function updateSpecialLasers() {
 
 // Verificar colisiones de láseres especiales
 function checkSpecialLaserCollisions() {
+    // Daño a obstáculos
     for (let i = obstacles.length - 1; i >= 0; i--) {
         for (let j = specialLasers.length - 1; j >= 0; j--) {
             const obs = obstacles[i];
             const laser = specialLasers[j];
-            
             if (
                 laser.x < obs.x + obs.width &&
                 laser.x + laser.width > obs.x &&
                 laser.y < obs.y + obs.height &&
                 laser.y + laser.height > obs.y
             ) {
-                // Láser especial hace más daño
                 obs.hp -= laser.damage;
-                
                 if (obs.hp <= 0) {
                     totalDestroyed++;
                     if (totalDestroyed === 50 && !bossActive) {
@@ -1802,7 +1837,6 @@ function checkSpecialLaserCollisions() {
                             laserMultiplier = Math.min(laserMultiplier * 2, 40);
                         }
                     }
-                    // Solo crear nave aliada si no hay ninguna viva (máximo 1)
                     let aliveAllyShips = allyShips.filter(ship => ship && ship.alive);
                     if (totalDestroyed === 10 && aliveAllyShips.length === 0) {
                         createAllyShip();
@@ -1815,6 +1849,29 @@ function checkSpecialLaserCollisions() {
                 }
                 specialLasers.splice(j, 1);
                 break;
+            }
+        }
+    }
+    // Daño al boss
+    if (boss && boss.alive) {
+        for (let j = specialLasers.length - 1; j >= 0; j--) {
+            const laser = specialLasers[j];
+            if (
+                laser.x < boss.x + boss.width &&
+                laser.x + laser.width > boss.x &&
+                laser.y < boss.y + boss.height &&
+                laser.y + laser.height > boss.y
+            ) {
+                boss.hp -= laser.damage;
+                if (boss.hp <= 0) {
+                    boss.destroyed = true;
+                    boss.alive = false;
+                    bossActive = false;
+                    createBossExplosion();
+                    victory = true;
+                    gameOver = true;
+                }
+                specialLasers.splice(j, 1);
             }
         }
     }
