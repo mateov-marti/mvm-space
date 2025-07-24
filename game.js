@@ -448,7 +448,7 @@ function createObstacle() {
 
 function createChaserRocks() {
     // NO eliminar obstáculos existentes, solo agregar las piedras radiactivas
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) { // Solo 2
         const width = 34 + Math.random() * 18;
         const height = 22 + Math.random() * 10;
         const startX = Math.random() * (canvas.width - width);
@@ -701,6 +701,7 @@ function checkCollisions() {
                     }
                     createObstacleDestructionFragments(obs);
                     obstacles.splice(i, 1);
+                    laserSpeed += 1; // Aumentar velocidad del láser
                 } else {
                     if (bossActive && ship.hp > 0) {
                         if (ship.hp > 1) {
@@ -760,6 +761,7 @@ function checkCollisions() {
                         }
                         createObstacleDestructionFragments(obs);
                         obstacles.splice(i, 1);
+                        laserSpeed += 1; // Aumentar velocidad del láser
                     } else {
                         allyShip.destroyed = true;
                         allyShip.explosionFrame = 0;
@@ -807,6 +809,7 @@ function checkCollisions() {
                     }
                     createObstacleDestructionFragments(obs);
                     obstacles.splice(i, 1);
+                    laserSpeed += 1; // Aumentar velocidad del láser
                 }
                 lasers.splice(j, 1);
                 break;
@@ -1348,8 +1351,8 @@ function createBoss() {
         x: canvas.width / 2 - 100,
         y: -200, // Empieza fuera de la pantalla
         speed: 1,
-        hp: 50,
-        maxHp: 50,
+        hp: Math.round(50 * 1.03), // 3% más vida
+        maxHp: Math.round(50 * 1.03),
         alive: true,
         destroyed: false,
         explosionFrame: 0,
@@ -1846,6 +1849,7 @@ function checkSpecialLaserCollisions() {
                     }
                     createObstacleDestructionFragments(obs);
                     obstacles.splice(i, 1);
+                    laserSpeed += 1; // Aumentar velocidad del láser
                 }
                 specialLasers.splice(j, 1);
                 break;
@@ -1872,6 +1876,7 @@ function checkSpecialLaserCollisions() {
                     gameOver = true;
                 }
                 specialLasers.splice(j, 1);
+                laserSpeed += 1; // Aumentar velocidad del láser
             }
         }
     }
