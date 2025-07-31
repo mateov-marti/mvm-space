@@ -312,7 +312,7 @@ function drawObstacle(obstacle) {
     ctx.translate(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2);
     ctx.rotate(obstacle.angle);
     
-    // Aura radioactiva para rocas perseguidoras
+    // Aura radioactiva para soles perseguidores
     if (obstacle.isChaser) {
         const pulse = Math.sin(Date.now() * 0.012 + obstacle.t) * 0.3 + 0.7;
         const auraSize = 28 + pulse * 16;
@@ -426,6 +426,7 @@ function drawObstacle(obstacle) {
         ctx.lineTo(obstacle.width/4, -obstacle.height/4);
         ctx.stroke();
     }
+    
     // Barra de vida
     if (obstacle.hp < obstacle.maxHp) {
         ctx.save();
@@ -592,6 +593,8 @@ function createLaserImpactEffect(x, y) {
         });
     }
 }
+
+
 
 function updateObstacles() {
     for (let obs of obstacles) {
@@ -925,6 +928,11 @@ function checkCollisions() {
                 createLaserImpactEffect(obs.x + obs.width/2, obs.y + obs.height/2);
                 
                 if (obs.hp <= 0) {
+                    // Si es un sol que puede dividirse, crear dos soles más pequeños
+                    if (obs.type === 'sun' && obs.canSplit) {
+                        createSplitSuns(obs);
+                    }
+                    
                     totalDestroyed++;
                     if (totalDestroyed === 50 && !bossActive) {
                         createBoss();
@@ -980,7 +988,7 @@ function drawScore() {
     ctx.fillStyle = '#fff';
     ctx.shadowColor = '#00bcd4';
     ctx.shadowBlur = 6;
-    ctx.fillText(`Total: ${totalDestroyed}  Radiactivas: ${destroyedChaserRocks}`, 18, 32);
+    ctx.fillText(`Total: ${totalDestroyed}  Soles Radiactivos: ${destroyedChaserRocks}`, 18, 32);
     // Barra de vida de la nave
     ctx.fillStyle = '#222';
     ctx.fillRect(18, 44, 120, 12);
@@ -1490,8 +1498,8 @@ function createBoss() {
         x: canvas.width / 2 - 100,
         y: -200, // Empieza fuera de la pantalla
         speed: 1,
-        hp: Math.round(50 * 1.03), // 3% más vida
-        maxHp: Math.round(50 * 1.03),
+        hp: Math.round(50 * 1.20), // 20% más vida
+        maxHp: Math.round(50 * 1.20),
         alive: true,
         destroyed: false,
         explosionFrame: 0,
@@ -1969,6 +1977,11 @@ function checkSpecialLaserCollisions() {
             ) {
                 obs.hp -= laser.damage;
                 if (obs.hp <= 0) {
+                    // Si es un sol que puede dividirse, crear dos soles más pequeños
+                    if (obs.type === 'sun' && obs.canSplit) {
+                        createSplitSuns(obs);
+                    }
+                    
                     totalDestroyed++;
                     if (totalDestroyed === 50 && !bossActive) {
                         createBoss();
