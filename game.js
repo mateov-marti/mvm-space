@@ -820,7 +820,7 @@ function checkCollisions() {
                     if (totalDestroyed === 50 && !bossActive) {
                         createBoss();
                     }
-                    if (totalDestroyed % 10 === 0 && totalDestroyed < 50) {
+                    if (totalDestroyed % 5 === 0 && totalDestroyed < 50) {
                         createChaserRocks();
                         if (laserMultiplier < 40) {
                             laserMultiplier = Math.min(laserMultiplier * 2, 40);
@@ -880,7 +880,7 @@ function checkCollisions() {
                         if (totalDestroyed === 50 && !bossActive) {
                             createBoss();
                         }
-                        if (totalDestroyed % 10 === 0 && totalDestroyed < 50) {
+                        if (totalDestroyed % 5 === 0 && totalDestroyed < 50) {
                             createChaserRocks();
                             if (laserMultiplier < 40) {
                                 laserMultiplier = Math.min(laserMultiplier * 2, 40);
@@ -928,16 +928,11 @@ function checkCollisions() {
                 createLaserImpactEffect(obs.x + obs.width/2, obs.y + obs.height/2);
                 
                 if (obs.hp <= 0) {
-                    // Si es un sol que puede dividirse, crear dos soles más pequeños
-                    if (obs.type === 'sun' && obs.canSplit) {
-                        createSplitSuns(obs);
-                    }
-                    
                     totalDestroyed++;
                     if (totalDestroyed === 50 && !bossActive) {
                         createBoss();
                     }
-                    if (totalDestroyed % 10 === 0 && totalDestroyed < 50) {
+                    if (totalDestroyed % 5 === 0 && totalDestroyed < 50) {
                         createChaserRocks();
                         if (laserMultiplier < 40) {
                             laserMultiplier = Math.min(laserMultiplier * 2, 40);
@@ -988,7 +983,7 @@ function drawScore() {
     ctx.fillStyle = '#fff';
     ctx.shadowColor = '#00bcd4';
     ctx.shadowBlur = 6;
-    ctx.fillText(`Total: ${totalDestroyed}  Soles Radiactivos: ${destroyedChaserRocks}`, 18, 32);
+    ctx.fillText(`Total: ${totalDestroyed}  Rocas Radiactivas: ${destroyedChaserRocks}`, 18, 32);
     // Barra de vida de la nave
     ctx.fillStyle = '#222';
     ctx.fillRect(18, 44, 120, 12);
@@ -1977,16 +1972,11 @@ function checkSpecialLaserCollisions() {
             ) {
                 obs.hp -= laser.damage;
                 if (obs.hp <= 0) {
-                    // Si es un sol que puede dividirse, crear dos soles más pequeños
-                    if (obs.type === 'sun' && obs.canSplit) {
-                        createSplitSuns(obs);
-                    }
-                    
                     totalDestroyed++;
                     if (totalDestroyed === 50 && !bossActive) {
                         createBoss();
                     }
-                    if (totalDestroyed % 10 === 0 && totalDestroyed < 50) {
+                    if (totalDestroyed % 5 === 0 && totalDestroyed < 50) {
                         createChaserRocks();
                         if (laserMultiplier < 40) {
                             laserMultiplier = Math.min(laserMultiplier * 2, 40);
