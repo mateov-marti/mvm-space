@@ -37,6 +37,9 @@ let lastObstacleTime = 0;
 // Fragmentos de desmoronamiento
 let fragments = [];
 
+// Efectos de impacto del láser
+let laserImpactEffects = [];
+
 // Explosión de pantalla completa
 let screenExplosion = {
     active: false,
@@ -218,39 +221,88 @@ function drawShip() {
 
 function drawLaser(laser) {
     ctx.save();
-    // Gradiente de energía para el láser
+    
+    // Efectos de partículas de energía alrededor del láser
+    for (let i = 0; i < 8; i++) {
+        const angle = (Date.now() * 0.01 + i * Math.PI / 4) % (Math.PI * 2);
+        const radius = 12 + Math.sin(Date.now() * 0.02 + i) * 4;
+        const x = laser.x + laserWidth/2 + Math.cos(angle) * radius;
+        const y = laser.y + laserHeight/2 + Math.sin(angle) * radius;
+        
+        ctx.save();
+        ctx.globalAlpha = 0.6 + 0.3 * Math.sin(Date.now() * 0.015 + i);
+        ctx.fillStyle = `rgba(255, ${100 + Math.random()*155}, 0, 0.8)`;
+        ctx.shadowColor = '#ff6600';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(x, y, 2 + Math.sin(Date.now() * 0.01 + i) * 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    
+    // Gradiente de energía mejorado para el láser
     let grad = ctx.createLinearGradient(laser.x, laser.y + laserHeight, laser.x, laser.y);
-    grad.addColorStop(0, 'rgba(255, 80, 80, 0.1)'); // base suave
-    grad.addColorStop(0.2, 'rgba(255, 80, 80, 0.5)');
-    grad.addColorStop(0.5, 'rgba(255, 0, 0, 1)'); // centro intenso
-    grad.addColorStop(0.8, 'rgba(255, 255, 80, 0.7)'); // energía amarilla
-    grad.addColorStop(1, 'rgba(255,255,255,0.9)'); // punta brillante
+    grad.addColorStop(0, 'rgba(255, 40, 40, 0.2)'); // base más suave
+    grad.addColorStop(0.1, 'rgba(255, 60, 60, 0.6)');
+    grad.addColorStop(0.3, 'rgba(255, 0, 0, 0.9)'); // centro intenso
+    grad.addColorStop(0.6, 'rgba(255, 255, 0, 1)'); // energía amarilla brillante
+    grad.addColorStop(0.8, 'rgba(255, 255, 255, 1)'); // punta blanca
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0.95)'); // extremo brillante
 
-    // Estela breve (fade out)
+    // Estela de energía mejorada (más larga y brillante)
     ctx.save();
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.4 + 0.2 * Math.sin(Date.now() / 60);
     ctx.shadowColor = '#ff4444';
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 25;
     ctx.fillStyle = grad;
-    ctx.fillRect(laser.x - 2, laser.y + 10, laserWidth + 4, laserHeight * 1.8);
+    ctx.fillRect(laser.x - 3, laser.y + 15, laserWidth + 6, laserHeight * 2.5);
     ctx.restore();
 
-    // Cuerpo principal del láser
+    // Cuerpo principal del láser con más efectos
     ctx.save();
     ctx.shadowColor = '#fff';
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = 20;
     ctx.fillStyle = grad;
     ctx.fillRect(laser.x, laser.y, laserWidth, laserHeight);
     ctx.restore();
 
-    // Resplandor animado alrededor del láser
+    // Resplandor animado más intenso alrededor del láser
     ctx.save();
-    ctx.globalAlpha = 0.5 + 0.2 * Math.sin(Date.now() / 80 + laser.x);
+    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(Date.now() / 50 + laser.x);
     ctx.shadowColor = '#ff2222';
-    ctx.shadowBlur = 24;
-    ctx.fillStyle = 'rgba(255, 40, 40, 0.2)';
-    ctx.fillRect(laser.x - 4, laser.y - 6, laserWidth + 8, laserHeight + 12);
+    ctx.shadowBlur = 35;
+    ctx.fillStyle = 'rgba(255, 40, 40, 0.3)';
+    ctx.fillRect(laser.x - 6, laser.y - 8, laserWidth + 12, laserHeight + 16);
     ctx.restore();
+
+    // Efecto de ondas de energía
+    ctx.save();
+    ctx.globalAlpha = 0.3 + 0.2 * Math.sin(Date.now() / 40);
+    ctx.strokeStyle = '#ff6600';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff6600';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.moveTo(laser.x - 8, laser.y + laserHeight/2);
+    ctx.lineTo(laser.x + laserWidth + 8, laser.y + laserHeight/2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Efecto de chispas en la punta del láser
+    for (let i = 0; i < 5; i++) {
+        const sparkX = laser.x + laserWidth/2 + (Math.random() - 0.5) * 8;
+        const sparkY = laser.y + (Math.random() - 0.5) * 4;
+        
+        ctx.save();
+        ctx.globalAlpha = 0.8 + 0.2 * Math.random();
+        ctx.fillStyle = `rgba(255, 255, ${100 + Math.random()*155}, 1)`;
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(sparkX, sparkY, 1 + Math.random() * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
 
     ctx.restore();
 }
@@ -504,6 +556,43 @@ function createFragments(obs) {
     }
 }
 
+function createLaserImpactEffect(x, y) {
+    // Crear múltiples efectos de impacto
+    for (let i = 0; i < 15; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 4;
+        const size = 3 + Math.random() * 6;
+        
+        laserImpactEffects.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: size,
+            color: `hsl(${Math.random() * 60 + 10}, 100%, 60%)`, // Naranjas y rojos
+            alpha: 1.0,
+            decay: 0.02 + Math.random() * 0.015,
+            type: Math.random() < 0.5 ? 'spark' : 'explosion'
+        });
+    }
+    
+    // Crear ondas de choque
+    for (let i = 0; i < 3; i++) {
+        laserImpactEffects.push({
+            x: x,
+            y: y,
+            vx: 0,
+            vy: 0,
+            size: 10 + i * 15,
+            color: '#ff6600',
+            alpha: 0.8,
+            decay: 0.03,
+            type: 'shockwave',
+            waveIndex: i
+        });
+    }
+}
+
 function updateObstacles() {
     for (let obs of obstacles) {
         obs.t += 1;
@@ -534,6 +623,49 @@ function updateFragments() {
         frag.alpha -= frag.decay;
     }
     fragments = fragments.filter(frag => frag.alpha > 0 && frag.y < canvas.height);
+}
+
+function updateLaserImpactEffects() {
+    for (let effect of laserImpactEffects) {
+        if (effect.type === 'shockwave') {
+            effect.size += 2;
+        } else {
+            effect.x += effect.vx;
+            effect.y += effect.vy;
+            effect.vx *= 0.95;
+            effect.vy *= 0.95;
+        }
+        effect.alpha -= effect.decay;
+    }
+    laserImpactEffects = laserImpactEffects.filter(effect => effect.alpha > 0);
+}
+
+function drawLaserImpactEffects() {
+    for (let effect of laserImpactEffects) {
+        ctx.save();
+        ctx.globalAlpha = effect.alpha;
+        
+        if (effect.type === 'shockwave') {
+            // Dibujar ondas de choque
+            ctx.strokeStyle = effect.color;
+            ctx.lineWidth = 3 - effect.waveIndex;
+            ctx.shadowColor = effect.color;
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            // Dibujar partículas de explosión
+            ctx.fillStyle = effect.color;
+            ctx.shadowColor = effect.color;
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
 }
 
 function updateLasers() {
@@ -787,7 +919,11 @@ function checkCollisions() {
                 laser.y < obs.y + obs.height &&
                 laser.y + laserHeight > obs.y
             ) {
-                obs.hp--;
+                // Aumentar el daño del láser - ahora hace 3 veces más daño
+                obs.hp -= 3;
+                // Crear efecto de explosión de impacto
+                createLaserImpactEffect(obs.x + obs.width/2, obs.y + obs.height/2);
+                
                 if (obs.hp <= 0) {
                     totalDestroyed++;
                     if (totalDestroyed === 50 && !bossActive) {
@@ -907,6 +1043,7 @@ function draw() {
     for (let frag of fragments) {
         drawFragment(frag);
     }
+    drawLaserImpactEffects(); // Dibujar efectos de impacto del láser
     for (let obs of obstacles) {
         drawObstacle(obs);
     }
@@ -953,6 +1090,7 @@ function resetGame() {
     lasers = [];
     specialLasers = [];
     fragments = [];
+    laserImpactEffects = [];
     lastObstacleTime = 0;
     gameOver = false;
     destroyedRocks = 0;
@@ -1022,6 +1160,7 @@ function gameLoop(timestamp) {
     updateLasers();
     updateSpecialLasers();
     updateFragments();
+    updateLaserImpactEffects(); // Actualizar efectos de impacto del láser
     updateShipDestructionFragments(); // Actualizar fragmentos de destrucción de la nave
     updateShield();
     checkCollisions();
